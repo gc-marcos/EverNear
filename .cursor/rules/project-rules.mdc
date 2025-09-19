@@ -1,0 +1,19 @@
+---
+alwaysApply: true
+---
+## Linguagem
+
+* Desenvolver exclusivamente em **Java**.
+* Utilizar apenas bibliotecas com suporte oficial Java**.
+
+---
+
+## Funcionalidades
+
+* Monitorar **frequência cardíaca**.
+* Monitorar **localização**.
+* Enviar **alertas automáticos com geolocalização**.
+* Registrar até **3 contatos de emergência**.
+* Armazenar dados de crises localmente.
+
+---
