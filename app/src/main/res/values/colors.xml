@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Cores principais -->
+    <color name="background_dark">#1A1A1A</color>
+    <color name="background_darker">#0D0D0D</color>
+    
+    <!-- Cores dos elementos -->
+    <color name="heart_red">#FF1744</color>
+    <color name="button_background">#2D2D2D</color>
+    <color name="button_pressed">#404040</color>
+    
+    <!-- Cores de status -->
+    <color name="status_connected">#4CAF50</color>
+    <color name="status_disconnected">#F44336</color>
+    <color name="status_text">#CCCCCC</color>
+    
+    <!-- Cores dos ícones -->
+    <color name="icon_primary">#FFFFFF</color>
+    <color name="icon_secondary">#B0B0B0</color>
+</resources>
+
+
+
