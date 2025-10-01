@@ -1,3 +1,46 @@
+
 # Default ignored files
 /shelf/
 /workspace.xml
+
+# Build
+/build/
+/app/build/
+/*.apk
+/*.aab
+/*.ap_
+
+# Gradle
+.gradle/
+/gradle/
+/local.properties
+
+# IntelliJ / Android Studio
+.idea/*
+!.idea/codeStyles
+!.idea/runConfigurations
+*.iml
+
+# Cache e logs
+.DS_Store
+*.log
+/captures
+.externalNativeBuild
+
+# Arquivos temporários
+*.swp
+*.swo
+*.tmp
+*~
+
+# NDK
+.obj/
+/*.so
+
+# Arquivos gerados
+GeneratedPluginRegistrant.java
+
+# VS Code (se usar em paralelo)
+.vscode/
+```
+
