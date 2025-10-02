@@ -16,6 +16,7 @@ public class MainActivity extends Activity {
     private TextView batteryStatus;
     private TextView connectionStatus;
     private ViewPager2 viewPager;
+    private Animation pulseAnimation;
     
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -37,12 +38,27 @@ public class MainActivity extends Activity {
     }
     
     private void setupHeartAnimation() {
-        Animation pulseAnimation = AnimationUtils.loadAnimation(this, R.anim.heart_pulse);
-        heartIcon.startAnimation(pulseAnimation);
+        pulseAnimation = AnimationUtils.loadAnimation(this, R.anim.heart_pulse);
         heartRateButton.setOnClickListener(v -> {
             Intent intent = new Intent(MainActivity.this, HeartRateSettingsActivity.class);
             startActivity(intent);
         });
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (heartIcon != null && pulseAnimation != null) {
+            heartIcon.startAnimation(pulseAnimation);
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        if (heartIcon != null) {
+            heartIcon.clearAnimation();
+        }
+        super.onPause();
     }
     
     private void setupStatusIndicators() {
