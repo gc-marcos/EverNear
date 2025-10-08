@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">EverNear</string>
+    <string name="emergency_contacts_empty_warning">Adicione pelo menos um contato de emergência</string>
+    <string name="emergency_contacts_saved">Contatos salvos com sucesso</string>
 </resources>

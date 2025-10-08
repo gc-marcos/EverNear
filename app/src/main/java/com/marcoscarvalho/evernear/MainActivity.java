@@ -13,6 +13,8 @@ public class MainActivity extends Activity {
     
     private ImageView heartIcon;
     private ImageView heartRateButton;
+    private ImageView locationButton;
+    private ImageView contactsButton;
     private TextView batteryStatus;
     private TextView connectionStatus;
     private ViewPager2 viewPager;
@@ -32,6 +34,8 @@ public class MainActivity extends Activity {
     private void initializeViews() {
         heartIcon = findViewById(R.id.heart_icon);
         heartRateButton = findViewById(R.id.heart_rate_button);
+        locationButton = findViewById(R.id.location_button);
+        contactsButton = findViewById(R.id.contacts_button);
         batteryStatus = findViewById(R.id.battery_status);
         connectionStatus = findViewById(R.id.connection_status);
         viewPager = findViewById(R.id.view_pager);
@@ -41,6 +45,14 @@ public class MainActivity extends Activity {
         pulseAnimation = AnimationUtils.loadAnimation(this, R.anim.heart_pulse);
         heartRateButton.setOnClickListener(v -> {
             Intent intent = new Intent(MainActivity.this, HeartRateSettingsActivity.class);
+            startActivity(intent);
+        });
+        locationButton.setOnClickListener(v -> {
+            Intent intent = new Intent(MainActivity.this, LocationSettingsActivity.class);
+            startActivity(intent);
+        });
+        contactsButton.setOnClickListener(v -> {
+            Intent intent = new Intent(MainActivity.this, EmergencyContactsActivity.class);
             startActivity(intent);
         });
     }
