@@ -1,3 +1,6 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     alias(libs.plugins.android.application)
 }
@@ -13,6 +16,22 @@ android {
         versionCode = 1
         versionName = "1.0"
 
+        // Load Google Maps API key from local.properties
+        val localProperties = Properties()
+        val localPropertiesFile = rootProject.file("local.properties")
+        if (localPropertiesFile.exists()) {
+            localProperties.load(FileInputStream(localPropertiesFile))
+        }
+        val googleMapsApiKey = localProperties.getProperty("GOOGLE_MAPS_API_KEY") ?: ""
+        buildConfigField("String", "GOOGLE_MAPS_API_KEY", "\"$googleMapsApiKey\"")
+        
+        // Inject API key into manifest
+        manifestPlaceholders["GOOGLE_MAPS_API_KEY"] = googleMapsApiKey
+
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     buildTypes {
@@ -33,6 +52,8 @@ android {
 dependencies {
 
     implementation(libs.play.services.wearable)
+    implementation("com.google.android.gms:play-services-location:21.3.0")
+    implementation("com.google.android.gms:play-services-maps:18.2.0")
     
     // UI Components
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")

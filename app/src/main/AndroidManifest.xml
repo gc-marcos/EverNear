@@ -4,6 +4,7 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <uses-permission android:name="android.permission.SEND_SMS" />
 
     <uses-feature android:name="android.hardware.type.watch" />
 
@@ -16,8 +17,8 @@
         
         <meta-data
             android:name="com.google.android.geo.API_KEY"
-            android:value="AIzaSyDRnBoJhcv_XkRgj9OoecoUPucUQcCM9tw" />
-        
+            android:value="${GOOGLE_MAPS_API_KEY}" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
