@@ -2,9 +2,78 @@
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
-    android:id="@+id/main"
+    android:id="@+id/cl_main_activity"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="@drawable/image_bg"
     tools:context=".MainActivity">
+
+    <!-- Logo EVER NEAR -->
+    <ImageView
+        android:id="@+id/img_logo_ever_near"
+        android:layout_width="171dp"
+        android:layout_height="43dp"
+        android:contentDescription="@string/logo_ever_near_description"
+        app:srcCompat="@drawable/image_logo_tela_inicial"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_bias="0.0"
+        android:layout_marginTop="16dp" />
+
+    <!-- Texto "Como você usará o" -->
+    <TextView
+        android:id="@+id/tv_welcome_question_part1"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/welcome_question_part1"
+        android:textColor="@android:color/white"
+        android:textSize="16sp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/img_logo_ever_near"
+        android:layout_marginTop="16dp" />
+
+    <!-- Texto "EVER NEAR ?" -->
+    <TextView
+        android:id="@+id/tv_welcome_question_part2"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/welcome_question_part2"
+        android:textColor="@android:color/white"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/tv_welcome_question_part1"
+        android:layout_marginTop="4dp" />
+
+    <!-- Botão Paciente -->
+    <ImageButton
+        android:id="@+id/btn_patient"
+        android:layout_width="71dp"
+        android:layout_height="86dp"
+        android:background="@null"
+        android:contentDescription="@string/button_patient_description"
+        android:scaleType="centerCrop"
+        app:srcCompat="@drawable/image_btn_paciente"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/tv_welcome_question_part2"
+        app:layout_constraintVertical_bias="0.0"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="24dp" />
+
+    <!-- Botão Cuidador -->
+    <ImageButton
+        android:id="@+id/btn_caregiver"
+        android:layout_width="71dp"
+        android:layout_height="86dp"
+        android:background="@null"
+        android:contentDescription="@string/button_caregiver_description"
+        android:scaleType="centerCrop"
+        app:srcCompat="@drawable/image_btn_cuidador"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="@id/btn_patient"
+        android:layout_marginEnd="16dp" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>
