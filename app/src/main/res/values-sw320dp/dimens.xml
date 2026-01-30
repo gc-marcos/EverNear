@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Tela de Login - Tela pequena (smartwatch / celular compacto) -->
+    <dimen name="login_screen_padding">12dp</dimen>
+    <dimen name="login_root_min_height">400dp</dimen>
+
+    <!-- Cabeçalho -->
+    <dimen name="login_heart_size">48dp</dimen>
+    <dimen name="login_heart_margin_top">16dp</dimen>
+    <dimen name="login_app_name_margin_top">8dp</dimen>
+    <dimen name="login_app_name_text_size">18sp</dimen>
+
+    <!-- Card -->
+    <dimen name="login_card_max_width">320dp</dimen>
+    <dimen name="login_card_padding">16dp</dimen>
+    <dimen name="login_card_margin_top">16dp</dimen>
+    <dimen name="login_card_elevation">8dp</dimen>
+
+    <!-- Inputs -->
+    <dimen name="login_input_corner_radius">22dp</dimen>
+    <dimen name="login_input_height">44dp</dimen>
+    <dimen name="login_input_drawable_padding">8dp</dimen>
+    <dimen name="login_input_padding_h">14dp</dimen>
+    <dimen name="login_input_text_size">14sp</dimen>
+    <dimen name="login_input_margin_bottom">12dp</dimen>
+
+    <!-- Botão -->
+    <dimen name="login_btn_corner_radius">24dp</dimen>
+    <dimen name="login_btn_height">48dp</dimen>
+    <dimen name="login_btn_margin_top">16dp</dimen>
+    <dimen name="login_btn_text_size">16sp</dimen>
+    <dimen name="login_btn_elevation">4dp</dimen>
+
+    <!-- Segurança -->
+    <dimen name="login_security_margin_top">12dp</dimen>
+    <dimen name="login_security_icon_size">16dp</dimen>
+    <dimen name="login_security_text_size">12sp</dimen>
+    <dimen name="login_security_icon_margin_end">6dp</dimen>
+
+    <!-- Rodapé -->
+    <dimen name="login_footer_margin_top">12dp</dimen>
+    <dimen name="login_footer_padding">12dp</dimen>
+    <dimen name="login_footer_text_size">12sp</dimen>
+</resources>
