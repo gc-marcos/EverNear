@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="80dp"
+    android:height="80dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Coração vermelho -->
+    <path
+        android:fillColor="@color/login_red_medical"
+        android:pathData="M12,21.35l-1.45,-1.32C5.4,15.36 2,12.28 2,8.5 2,5.42 4.42,3 7.5,3c1.74,0 3.41,0.81 4.5,2.09C13.09,3.81 14.76,3 16.5,3 19.58,3 22,5.42 22,8.5c0,3.78 -3.4,6.86 -8.55,11.54L12,21.35z"/>
+    <!-- Linha ECG/batimento (branca, horizontal pelo centro do coração) -->
+    <path
+        android:pathData="M2,12 L4,12 L5,9 L7,15 L9,12 L11,12 L12,11 L14,13 L16,12 L18,12 L20,11 L22,12"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="0.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="@android:color/transparent"/>
+</vector>
