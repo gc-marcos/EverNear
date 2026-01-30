@@ -1,8 +1,16 @@
 <resources>
-    <string name="app_name">EverNear</string>
+    <string name="app_name">EVER NEAR</string>
     <string name="welcome_question_part1">Como você usará o</string>
     <string name="welcome_question_part2">EVER NEAR ?</string>
     <string name="logo_ever_near_description">Logo do aplicativo EVER NEAR</string>
     <string name="button_patient_description">Botão para selecionar perfil de Paciente</string>
     <string name="button_caregiver_description">Botão para selecionar perfil de Cuidador</string>
+
+    <!-- Tela de Login -->
+    <string name="icon_heart_description">Ícone de coração</string>
+    <string name="login_hint_email_phone">Email ou telefone</string>
+    <string name="login_hint_password">Senha</string>
+    <string name="login_button_entrar">ENTRAR</string>
+    <string name="login_security_message">Seus dados são protegidos</string>
+    <string name="login_first_access">Primeiro acesso? Criar conta</string>
 </resources>
