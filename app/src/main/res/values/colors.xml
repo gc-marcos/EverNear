@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Tela de Login - Paleta padrão do app -->
+    <color name="login_bg_primary">#0D1117</color>
+    <color name="login_card_bg">#161B22</color>
+    <color name="login_red_medical">#E10600</color>
+    <color name="login_green_safe">#00C853</color>
+    <color name="login_blue_tech">#1E88E5</color>
+    <color name="login_text_primary">#FFFFFF</color>
+    <color name="login_text_secondary">#9AA4B2</color>
+</resources>
