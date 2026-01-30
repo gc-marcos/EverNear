@@ -13,6 +13,11 @@
             android:name=".MainActivity"
             android:exported="false"
             android:theme="@android:style/Theme.DeviceDefault.NoActionBar" />
+        <activity
+            android:name=".LoginActivity"
+            android:exported="false"
+            android:theme="@style/Theme.EverNear.Login"
+            android:windowSoftInputMode="adjustResize" />
     </application>
 
 </manifest>
