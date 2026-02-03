@@ -8,4 +8,9 @@
     <color name="login_blue_tech">#1E88E5</color>
     <color name="login_text_primary">#FFFFFF</color>
     <color name="login_text_secondary">#9AA4B2</color>
+
+    <!-- Tela do Cuidador -->
+    <color name="caregiver_text_primary">#FFFFFF</color>
+    <color name="caregiver_text_secondary">#A4B0D6</color>
+    <color name="caregiver_alert_red">#FF4D6D</color>
 </resources>

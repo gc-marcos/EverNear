@@ -13,4 +13,23 @@
     <string name="login_button_entrar">ENTRAR</string>
     <string name="login_security_message">Seus dados são protegidos</string>
     <string name="login_first_access">Primeiro acesso? Criar conta</string>
+
+    <!-- Tela do Cuidador -->
+    <string name="caregiver_back">Voltar</string>
+    <string name="caregiver_alert_title">ALERTA</string>
+    <string name="caregiver_patient_name">João Silva</string>
+    <string name="caregiver_patient_initials">JS</string>
+    <string name="caregiver_bpm_value">❤ 132 bpm</string>
+    <string name="caregiver_alert_message">Frequência cardíaca elevada!</string>
+    <string name="caregiver_last_location_label">Última localização:</string>
+    <string name="caregiver_last_location_value">Em casa, 14:32</string>
+    <string name="caregiver_call_button">LIGAR</string>
+    <string name="caregiver_map_button">MAPA</string>
+    <string name="caregiver_contact_maria_initials">M</string>
+    <string name="caregiver_contact_maria">Maria</string>
+    <string name="caregiver_contact_ana_initials">A</string>
+    <string name="caregiver_contact_ana">Ana</string>
+    <string name="caregiver_contact_pedro_initials">P</string>
+    <string name="caregiver_contact_pedro">Pedro</string>
+    <string name="caregiver_bottom_map">Mapa</string>
 </resources>
