@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>EverNear</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <div id="screen-main" class="screen active">
+      <div class="main-bg">
+        <div class="logo-container">
+          <div class="logo-text">EVER NEAR</div>
+          <div class="heartbeat-icon-small">&#10084;</div>
+        </div>
+        <div class="welcome-text">
+          <p>Como você usará o</p>
+          <p class="bold">EVER NEAR ?</p>
+        </div>
+        <div class="role-buttons">
+          <button class="role-btn" onclick="navigateTo('login', 'patient')">
+            <div class="role-icon">&#128100;</div>
+            <span>Paciente</span>
+          </button>
+          <button class="role-btn" onclick="navigateTo('login', 'caregiver')">
+            <div class="role-icon">&#129658;</div>
+            <span>Cuidador</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div id="screen-login" class="screen">
+      <div class="login-bg">
+        <div class="login-header">
+          <div class="heart-icon">&#10084;&#65039;</div>
+          <h1 class="app-title">EVER NEAR</h1>
+        </div>
+        <div class="login-card">
+          <div class="input-group">
+            <span class="input-icon">&#9993;</span>
+            <input type="email" id="email-input" placeholder="Email ou telefone">
+          </div>
+          <div class="input-group">
+            <span class="input-icon">&#128274;</span>
+            <input type="password" id="password-input" placeholder="Senha">
+            <span class="toggle-password" onclick="togglePassword()">&#128065;</span>
+          </div>
+        </div>
+        <button class="btn-login" onclick="handleLogin()">ENTRAR</button>
+        <div class="security-msg">
+          <span class="lock-green">&#128274;</span>
+          <span>Seus dados são protegidos</span>
+        </div>
+        <p class="create-account" onclick="handleLogin()">Primeiro acesso? <span class="underline">Criar conta</span></p>
+      </div>
+    </div>
+
+    <div id="screen-patient" class="screen">
+      <div class="patient-bg">
+        <div class="patient-header">
+          <button class="back-btn" onclick="navigateTo('main')">&#8592;</button>
+        </div>
+        <div class="heart-monitor">
+          <div class="heart-pulse">&#10084;</div>
+          <div class="bpm-value" id="bpm-display">78</div>
+          <div class="bpm-label">bpm</div>
+          <div class="status-normal" id="status-display">Normal</div>
+        </div>
+        <div class="ecg-container">
+          <canvas id="ecg-canvas" width="320" height="80"></canvas>
+        </div>
+        <button class="btn-emergency" onclick="triggerEmergency()">
+          <span>&#9888;</span> EMERGÊNCIA
+        </button>
+      </div>
+    </div>
+
+    <div id="screen-caregiver" class="screen">
+      <div class="caregiver-bg">
+        <div class="caregiver-header">
+          <button class="back-btn" onclick="navigateTo('main')">&#8592;</button>
+          <h2 class="alert-title">ALERTA</h2>
+        </div>
+        <div class="alert-card">
+          <div class="patient-info">
+            <div class="avatar-ring">
+              <div class="avatar">JS</div>
+            </div>
+            <div class="patient-details">
+              <div class="patient-name">João Silva</div>
+              <div class="patient-bpm">&#10084; 132 bpm</div>
+            </div>
+          </div>
+          <p class="alert-message">Frequência cardíaca elevada!</p>
+          <div class="location-pill">
+            <span class="location-label">Última localização:</span>
+            <span class="location-value">Em casa, 14:32</span>
+          </div>
+          <div class="action-buttons">
+            <button class="btn-action btn-call">LIGAR</button>
+            <button class="btn-action btn-map">MAPA</button>
+          </div>
+        </div>
+        <div class="contacts-row">
+          <div class="contact">
+            <div class="contact-avatar">M</div>
+            <span>Maria</span>
+          </div>
+          <div class="contact">
+            <div class="contact-avatar">A</div>
+            <span>Ana</span>
+          </div>
+          <div class="contact">
+            <div class="contact-avatar">P</div>
+            <span>Pedro</span>
+          </div>
+        </div>
+        <div class="bottom-bar">
+          <span>&#128506;</span>
+          <span>Mapa</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

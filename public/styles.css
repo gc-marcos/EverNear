@@ -1,0 +1,591 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #0D1117;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+#app {
+  width: 100%;
+  max-width: 420px;
+  height: 100vh;
+  max-height: 900px;
+  position: relative;
+  overflow: hidden;
+  background: #0D1117;
+}
+
+.screen {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: none;
+  animation: fadeIn 0.3s ease;
+}
+
+.screen.active {
+  display: flex;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.main-bg {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(180deg, #0D1117 0%, #161B22 50%, #1a1f2e 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 40px 20px;
+}
+
+.logo-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 40px;
+}
+
+.logo-text {
+  font-size: 28px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 3px;
+}
+
+.heartbeat-icon-small {
+  color: #E10600;
+  font-size: 20px;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.2); }
+}
+
+.welcome-text {
+  text-align: center;
+  color: #fff;
+  font-size: 18px;
+  margin-bottom: 40px;
+}
+
+.welcome-text .bold {
+  font-weight: 700;
+  margin-top: 4px;
+}
+
+.role-buttons {
+  display: flex;
+  gap: 40px;
+  margin-top: 20px;
+}
+
+.role-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 20px;
+  padding: 30px 35px;
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.role-btn:hover {
+  background: rgba(255,255,255,0.12);
+  border-color: rgba(255,255,255,0.2);
+  transform: translateY(-2px);
+}
+
+.role-btn:active {
+  transform: translateY(0);
+}
+
+.role-icon {
+  font-size: 40px;
+}
+
+.login-bg {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(180deg, #0D1117 0%, #0f141c 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 50px 24px 30px;
+}
+
+.login-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 32px;
+}
+
+.heart-icon {
+  font-size: 56px;
+  margin-bottom: 12px;
+  animation: pulse 1.5s infinite;
+}
+
+.app-title {
+  color: #fff;
+  font-size: 26px;
+  letter-spacing: 3px;
+  font-weight: 700;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 360px;
+  background: #161B22;
+  border-radius: 16px;
+  padding: 24px;
+  margin-bottom: 20px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+}
+
+.input-group {
+  display: flex;
+  align-items: center;
+  background: #21262D;
+  border-radius: 12px;
+  padding: 0 16px;
+  margin-bottom: 14px;
+  height: 50px;
+  border: 1px solid rgba(255,255,255,0.06);
+}
+
+.input-group:last-child {
+  margin-bottom: 0;
+}
+
+.input-icon {
+  font-size: 18px;
+  margin-right: 12px;
+  opacity: 0.5;
+}
+
+.input-group input {
+  flex: 1;
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 15px;
+  outline: none;
+}
+
+.input-group input::placeholder {
+  color: #9AA4B2;
+}
+
+.toggle-password {
+  cursor: pointer;
+  opacity: 0.5;
+  font-size: 18px;
+  transition: opacity 0.2s;
+}
+
+.toggle-password:hover {
+  opacity: 0.8;
+}
+
+.btn-login {
+  width: 100%;
+  max-width: 360px;
+  height: 50px;
+  background: linear-gradient(135deg, #E10600, #c70500);
+  border: none;
+  border-radius: 12px;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 4px 16px rgba(225,6,0,0.3);
+}
+
+.btn-login:hover {
+  background: linear-gradient(135deg, #ff1a0e, #E10600);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(225,6,0,0.4);
+}
+
+.btn-login:active {
+  transform: translateY(0);
+}
+
+.security-msg {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #9AA4B2;
+  font-size: 13px;
+  margin-top: 20px;
+}
+
+.lock-green {
+  color: #00C853;
+}
+
+.create-account {
+  color: #9AA4B2;
+  font-size: 14px;
+  margin-top: 30px;
+  cursor: pointer;
+}
+
+.create-account .underline {
+  text-decoration: underline;
+}
+
+.patient-bg {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(180deg, #0D1117 0%, #111827 60%, #1a0a0a 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px;
+}
+
+.patient-header {
+  width: 100%;
+  display: flex;
+  justify-content: flex-start;
+  margin-bottom: 20px;
+}
+
+.back-btn {
+  background: rgba(255,255,255,0.1);
+  border: none;
+  color: #fff;
+  font-size: 22px;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.back-btn:hover {
+  background: rgba(255,255,255,0.2);
+}
+
+.heart-monitor {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 20px;
+}
+
+.heart-pulse {
+  font-size: 50px;
+  color: #E10600;
+  animation: heartbeat 1s infinite;
+}
+
+@keyframes heartbeat {
+  0%, 100% { transform: scale(1); }
+  15% { transform: scale(1.15); }
+  30% { transform: scale(1); }
+  45% { transform: scale(1.1); }
+}
+
+.bpm-value {
+  font-size: 72px;
+  font-weight: 300;
+  color: #fff;
+  margin-top: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.bpm-label {
+  font-size: 18px;
+  color: rgba(255,255,255,0.6);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+.status-normal {
+  font-size: 20px;
+  color: #00C853;
+  font-weight: 600;
+  margin-top: 16px;
+  padding: 6px 20px;
+  border-radius: 20px;
+  background: rgba(0,200,83,0.1);
+}
+
+.status-warning {
+  color: #FF9800;
+  background: rgba(255,152,0,0.1);
+}
+
+.status-danger {
+  color: #FF4D6D;
+  background: rgba(255,77,109,0.1);
+}
+
+.ecg-container {
+  margin-top: 30px;
+  width: 100%;
+  max-width: 340px;
+  background: rgba(255,255,255,0.03);
+  border-radius: 16px;
+  padding: 16px;
+  border: 1px solid rgba(255,255,255,0.06);
+}
+
+#ecg-canvas {
+  width: 100%;
+  height: 80px;
+}
+
+.btn-emergency {
+  width: 100%;
+  max-width: 340px;
+  height: 56px;
+  background: linear-gradient(135deg, #FF0000, #cc0000);
+  border: none;
+  border-radius: 14px;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  cursor: pointer;
+  margin-top: auto;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  transition: all 0.2s;
+  box-shadow: 0 4px 20px rgba(255,0,0,0.3);
+}
+
+.btn-emergency:hover {
+  box-shadow: 0 6px 28px rgba(255,0,0,0.5);
+  transform: translateY(-1px);
+}
+
+.btn-emergency:active {
+  transform: translateY(0);
+}
+
+.caregiver-bg {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(180deg, #0D1117 0%, #111827 100%);
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.caregiver-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.caregiver-header .back-btn {
+  margin-right: 12px;
+}
+
+.alert-title {
+  color: #FF4D6D;
+  font-size: 22px;
+  font-weight: 700;
+  flex: 1;
+  text-align: center;
+  margin-right: 52px;
+}
+
+.alert-card {
+  background: rgba(255,255,255,0.06);
+  border-radius: 20px;
+  padding: 24px;
+  margin-bottom: 24px;
+  border: 1px solid rgba(255,77,109,0.15);
+}
+
+.patient-info {
+  display: flex;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.avatar-ring {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 2px solid #FF4D6D;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 16px;
+}
+
+.avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.patient-details {
+  display: flex;
+  flex-direction: column;
+}
+
+.patient-name {
+  color: #fff;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.patient-bpm {
+  color: #FF4D6D;
+  font-size: 18px;
+  font-weight: 700;
+  margin-top: 4px;
+}
+
+.alert-message {
+  color: #A4B0D6;
+  font-size: 15px;
+  margin-bottom: 16px;
+}
+
+.location-pill {
+  background: rgba(255,255,255,0.06);
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.location-label {
+  color: #A4B0D6;
+  font-size: 12px;
+}
+
+.location-value {
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 12px;
+}
+
+.btn-action {
+  flex: 1;
+  height: 44px;
+  border: none;
+  border-radius: 10px;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-call {
+  background: linear-gradient(135deg, #E10600, #cc0000);
+}
+
+.btn-map {
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.15);
+}
+
+.btn-action:hover {
+  transform: translateY(-1px);
+}
+
+.contacts-row {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.contact {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: #A4B0D6;
+  font-size: 13px;
+}
+
+.contact-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.bottom-bar {
+  background: rgba(255,255,255,0.06);
+  border-radius: 12px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #A4B0D6;
+  font-weight: 600;
+  margin-top: auto;
+}
+
+@media (max-width: 420px) {
+  #app {
+    max-width: 100%;
+    max-height: 100vh;
+    border-radius: 0;
+  }
+}
