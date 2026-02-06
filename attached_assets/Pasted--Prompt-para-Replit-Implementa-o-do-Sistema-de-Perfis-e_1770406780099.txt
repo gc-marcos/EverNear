@@ -1,0 +1,209 @@
+# Prompt para Replit - Implementação do Sistema de Perfis e Vínculo
+
+```
+CONTEXTO:
+Você está revisando um aplicativo Android existente em Java. O app JÁ POSSUI telas e funcionalidades básicas implementadas. Sua tarefa é APENAS revisar o código existente e implementar/complementar o sistema de seleção de perfil de usuário e vínculo entre paciente e cuidador.
+
+IMPORTANTE: Este código será testado no Android Studio, não no Replit. Gere código completo e funcional.
+
+---
+
+## 🎯 O QUE VOCÊ DEVE FAZER:
+
+### 1️⃣ REVISAR O CÓDIGO EXISTENTE
+Analise o projeto e identifique:
+- Quais activities já existem
+- Qual estrutura de navegação está implementada
+- Quais integrações com Firebase já estão configuradas
+- O que está faltando para implementar o fluxo descrito abaixo
+
+### 2️⃣ IMPLEMENTAR APENAS O QUE FALTA
+
+---
+
+## 📋 FUNCIONALIDADES REQUERIDAS
+
+### A) TELA DE SELEÇÃO DE PERFIL (Primeira tela do app)
+
+**O que implementar:**
+- Activity que pergunta: "Você é Paciente ou Cuidador?"
+- Dois botões:
+  - `btn_patient` (botão "Sou Paciente")
+  - `btn_caregiver` (botão "Sou Cuidador")
+- Ao clicar em qualquer botão:
+  - Armazenar temporariamente a escolha (tipo de usuário)
+  - Navegar para a tela de login
+  - Passar o tipo de usuário para a LoginActivity
+
+**Verificação importante:**
+- Se o usuário já estiver logado (FirebaseAuth.getCurrentUser() != null), pular essa tela
+- Buscar o tipo de usuário no Firestore e redirecionar para o dashboard correto
+
+---
+
+### B) MODIFICAR/CRIAR LoginActivity
+
+**O que implementar:**
+
+1. **Receber o tipo de usuário** da tela anterior via Intent
+2. **Modo Login**: Permitir login com email/senha
+3. **Modo Cadastro**: Coletar nome + email + senha
+4. **Ao cadastrar com sucesso**, salvar no Firestore:
+
+```java
+// Estrutura de dados para PACIENTE:
+{
+    "nome": "João Silva",
+    "email": "joao@email.com",
+    "tipo": "paciente",
+    "codigoVinculo": "ABC123", // GERAR CÓDIGO DE 6 CARACTERES
+    "cuidadorVinculado": null  // null até vincular
+}
+
+// Estrutura de dados para CUIDADOR:
+{
+    "nome": "Maria Santos",
+    "email": "maria@email.com",
+    "tipo": "cuidador",
+    "pacientesVinculados": []  // Array vazio inicialmente (máx 3 pacientes)
+}
+```
+
+5. **Função para gerar código de vínculo** (apenas para pacientes):
+   - 6 caracteres alfanuméricos aleatórios (A-Z, 0-9)
+   - Exemplo: "A3X7K9"
+
+6. **Após login/cadastro bem-sucedido**:
+   - Buscar tipo de usuário no Firestore
+   - Redirecionar para DashboardPacienteActivity OU DashboardCuidadorActivity
+
+---
+
+### C) DASHBOARD DO PACIENTE
+
+**O que implementar:**
+
+1. **Exibir informações do paciente:**
+   - Nome do paciente
+   - Código de vínculo (grande e destacado)
+   - Status do vínculo:
+     - Se `cuidadorVinculado == null`: "Compartilhe este código com seu cuidador"
+     - Se vinculado: "Vinculado a: [Nome do Cuidador]"
+
+2. **Layout sugerido:**
+```xml
+- TextView: "Olá, [Nome do Paciente]"
+- CardView com:
+  - TextView: "Seu Código de Vínculo:"
+  - TextView (grande): "ABC123"
+  - Button: "Compartilhar Código" (abre share do Android)
+- TextView: Status do vínculo
+```
+
+---
+
+### D) DASHBOARD DO CUIDADOR
+
+**O que implementar:**
+
+1. **Seção de Vincular Novo Paciente:**
+   - EditText para digitar código (6 caracteres)
+   - Button "Vincular Paciente"
+
+2. **Lógica de vinculação:**
+```java
+// Ao clicar em Vincular:
+1. Buscar no Firestore um paciente com codigoVinculo == codigo_digitado
+2. Verificar se o cuidador já tem 3 pacientes vinculados (limite máximo)
+3. Se encontrou o paciente E tem espaço:
+   - Adicionar UID do paciente no array "pacientesVinculados" do cuidador
+   - Atualizar campo "cuidadorVinculado" do paciente com UID do cuidador
+4. Mostrar mensagem de sucesso
+```
+
+3. **Lista de Pacientes Vinculados:**
+   - RecyclerView mostrando os pacientes vinculados
+   - Cada item exibe: Nome do paciente + botão "Desvincular"
+
+---
+
+## 🔥 ESTRUTURA FIRESTORE (use exatamente assim)
+
+### Coleção: `users`
+```
+users
+ ├── {uid_paciente_1}
+ │    ├── nome: "João Silva"
+ │    ├── email: "joao@email.com"
+ │    ├── tipo: "paciente"
+ │    ├── codigoVinculo: "ABC123"
+ │    └── cuidadorVinculado: "{uid_cuidador}" ou null
+ │
+ └── {uid_cuidador_1}
+      ├── nome: "Maria Santos"
+      ├── email: "maria@email.com"
+      ├── tipo: "cuidador"
+      └── pacientesVinculados: ["{uid_paciente_1}", "{uid_paciente_2}"]
+```
+
+---
+
+## 🔧 CÓDIGO JAVA QUE VOCÊ DEVE FORNECER
+
+Gere código completo para:
+
+1. **SelecaoPerfilActivity.java** (se não existir)
+2. **LoginActivity.java** (modificações necessárias)
+3. **DashboardPacienteActivity.java** (funcionalidade de exibir código)
+4. **DashboardCuidadorActivity.java** (funcionalidade de vincular)
+5. **Classe Helper:** `FirebaseHelper.java` com métodos:
+   - `gerarCodigoVinculo()`
+   - `salvarUsuario(uid, nome, email, tipo)`
+   - `vincularPacienteCuidador(uidCuidador, codigoPaciente)`
+   - `buscarPacientePorCodigo(codigo, callback)`
+   - `verificarLimitePacientes(uidCuidador, callback)`
+
+---
+
+## ✅ VALIDAÇÕES OBRIGATÓRIAS
+
+1. **Limite de pacientes:** Cuidador pode ter no máximo 3 pacientes
+2. **Código único:** Verificar se código gerado já não existe no Firestore
+3. **Código válido:** Ao vincular, verificar se código existe e se paciente ainda não tem cuidador
+4. **Persistência:** Ao reabrir app, usuário logado deve ir direto para seu dashboard
+
+---
+
+## 📝 OBSERVAÇÕES IMPORTANTES
+
+- Use **Firebase Authentication** para login/cadastro
+- Use **Firebase Firestore** para armazenar perfis e vínculos
+- NÃO implemente FCM ou Realtime Database agora (será feito depois)
+- Todos os métodos Firebase devem ter tratamento de erro com Toast
+- Use ProgressDialog ou ProgressBar durante operações assíncronas
+- Código deve ser comentado e bem estruturado
+
+---
+
+## 🚀 ENTREGA ESPERADA
+
+Forneça:
+1. Código Java completo de cada classe mencionada
+2. Layouts XML necessários (se precisar criar novos)
+3. Comentários explicando lógica principal
+4. Lista de dependências do Firebase que devem estar no build.gradle
+
+---
+
+LEMBRE-SE: Revise o código existente primeiro e implemente APENAS o que falta para completar esse fluxo de perfis e vínculo. Não recrie funcionalidades já existentes.
+```
+
+---
+
+**Como usar este prompt:**
+1. Cole no Replit Agent
+2. Ele vai analisar seu projeto
+3. Vai identificar o que falta
+4. Vai gerar apenas o código necessário para completar o sistema de perfis e vínculo
+
+Esse prompt é objetivo e focado apenas na parte que você precisa implementar agora! 🎯

@@ -89,22 +89,24 @@ public class LoginActivity extends AppCompatActivity {
     private void saveUserRole(FirebaseUser firebaseUser) {
         if (firebaseUser != null && userType != null) {
             String userId = firebaseUser.getUid();
-            Map<String, Object> user = new HashMap<>();
-            user.put("role", userType);
+            String nome = "Usuário " + userId.substring(0, 4); // Nome padrão simples
 
-            db.collection("users").document(userId)
-                    .set(user)
-                    .addOnSuccessListener(aVoid -> {
-                        Log.d(TAG, "DocumentSnapshot successfully written!");
-                        if ("patient".equals(userType)) {
-                            Intent intent = new Intent(LoginActivity.this, PatientActivity.class);
-                            startActivity(intent);
-                        } else if ("caregiver".equals(userType)) {
-                            Intent intent = new Intent(LoginActivity.this, CaregiverActivity.class);
-                            startActivity(intent);
-                        }
-                    })
-                    .addOnFailureListener(e -> Log.w(TAG, "Error writing document", e));
+            FirebaseHelper.salvarUsuario(userId, nome, firebaseUser.getEmail(), userType, new FirebaseHelper.Callback<Void>() {
+                @Override
+                public void onResult(Void result) {
+                    if ("patient".equals(userType)) {
+                        startActivity(new Intent(LoginActivity.this, DashboardPacienteActivity.class));
+                    } else {
+                        startActivity(new Intent(LoginActivity.this, DashboardCuidadorActivity.class));
+                    }
+                    finish();
+                }
+
+                @Override
+                public void onError(Exception e) {
+                    Toast.makeText(LoginActivity.this, "Erro ao salvar dados", Toast.LENGTH_SHORT).show();
+                }
+            });
         }
     }
 

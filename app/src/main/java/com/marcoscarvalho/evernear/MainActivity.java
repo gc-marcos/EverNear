@@ -44,5 +44,25 @@ public class MainActivity extends AppCompatActivity {
                 startActivity(intent);
             }
         });
+
+        verificarSessao();
+    }
+
+    private void verificarSessao() {
+        if (com.google.firebase.auth.FirebaseAuth.getInstance().getCurrentUser() != null) {
+            String uid = com.google.firebase.auth.FirebaseAuth.getInstance().getUid();
+            com.google.firebase.firestore.FirebaseFirestore.getInstance().collection("users").document(uid).get()
+                    .addOnSuccessListener(documentSnapshot -> {
+                        if (documentSnapshot.exists()) {
+                            String tipo = documentSnapshot.getString("tipo");
+                            if ("patient".equals(tipo)) {
+                                startActivity(new Intent(MainActivity.this, DashboardPacienteActivity.class));
+                            } else {
+                                startActivity(new Intent(MainActivity.this, DashboardCuidadorActivity.class));
+                            }
+                            finish();
+                        }
+                    });
+        }
     }
 }
