@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "100986741095",
+    "project_id": "evernear-1da08",
+    "storage_bucket": "evernear-1da08.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:100986741095:android:de34c71bfc76e6dab8cfc2",
+        "android_client_info": {
+          "package_name": "com.marcoscarvalho.evernear"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC6vufs2Ye4xxTdcx_7gq8wZJjn3IZvr28"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
