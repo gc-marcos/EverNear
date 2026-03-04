@@ -76,7 +76,19 @@ public class LoginActivity extends AppCompatActivity {
                         if (task.isSuccessful()) {
                             Log.d(TAG, "signInWithEmail:success");
                             FirebaseUser user = mAuth.getCurrentUser();
-                            saveUserRole(user);
+                            if (user != null) {
+                                // Se o usuário já existe, buscamos o tipo dele no Firestore
+                                db.collection("users").document(user.getUid()).get()
+                                        .addOnSuccessListener(documentSnapshot -> {
+                                            if (documentSnapshot.exists()) {
+                                                String tipo = documentSnapshot.getString("tipo");
+                                                direcionarUsuario(tipo);
+                                            } else {
+                                                // Se por algum motivo não tiver os dados no Firestore, salva agora
+                                                saveUserRole(user);
+                                            }
+                                        });
+                            }
                         } else {
                             Log.w(TAG, "signInWithEmail:failure", task.getException());
                             Toast.makeText(LoginActivity.this, "Authentication failed.",
@@ -86,20 +98,24 @@ public class LoginActivity extends AppCompatActivity {
                 });
     }
 
+    private void direcionarUsuario(String tipo) {
+        if ("patient".equals(tipo) || "paciente".equals(tipo)) {
+            startActivity(new Intent(LoginActivity.this, DashboardPacienteActivity.class));
+        } else {
+            startActivity(new Intent(LoginActivity.this, DashboardCuidadorActivity.class));
+        }
+        finish();
+    }
+
     private void saveUserRole(FirebaseUser firebaseUser) {
         if (firebaseUser != null && userType != null) {
             String userId = firebaseUser.getUid();
-            String nome = "Usuário " + userId.substring(0, 4); // Nome padrão simples
+            String nome = "Usuário " + userId.substring(0, 4); 
 
             FirebaseHelper.salvarUsuario(userId, nome, firebaseUser.getEmail(), userType, new FirebaseHelper.Callback<Void>() {
                 @Override
                 public void onResult(Void result) {
-                    if ("patient".equals(userType)) {
-                        startActivity(new Intent(LoginActivity.this, DashboardPacienteActivity.class));
-                    } else {
-                        startActivity(new Intent(LoginActivity.this, DashboardCuidadorActivity.class));
-                    }
-                    finish();
+                    direcionarUsuario(userType);
                 }
 
                 @Override
@@ -134,10 +150,12 @@ public class LoginActivity extends AppCompatActivity {
                         if (task.isSuccessful()) {
                             Log.d(TAG, "createUserWithEmail:success");
                             FirebaseUser user = mAuth.getCurrentUser();
-                            saveUserRole(user);
+                            if (user != null) {
+                                saveUserRole(user);
+                            }
                         } else {
                             Log.w(TAG, "createUserWithEmail:failure", task.getException());
-                            Toast.makeText(LoginActivity.this, "Authentication failed.",
+                            Toast.makeText(LoginActivity.this, "Authentication failed: " + task.getException().getMessage(),
                                     Toast.LENGTH_SHORT).show();
                         }
                     }

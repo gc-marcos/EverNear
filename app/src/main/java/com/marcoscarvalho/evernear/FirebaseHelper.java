@@ -34,9 +34,9 @@ public class FirebaseHelper {
         Map<String, Object> user = new HashMap<>();
         user.put("nome", nome);
         user.put("email", email);
-        user.put("tipo", tipo);
+        user.put("tipo", tipo); // "paciente" ou "cuidador"
 
-        if ("paciente".equals(tipo)) {
+        if ("paciente".equals(tipo) || "patient".equals(tipo)) {
             user.put("codigoVinculo", gerarCodigoVinculo());
             user.put("cuidadorVinculado", null);
         } else {
