@@ -43,10 +43,16 @@ public class FirebaseHelper {
             user.put("pacientesVinculados", new java.util.ArrayList<String>());
         }
 
-        db.collection("users").document(uid)
-                .set(user)
-                .addOnSuccessListener(aVoid -> callback.onResult(null))
-                .addOnFailureListener(callback::onError);
+        try {
+            db.collection("users").document(uid)
+                    .set(user)
+                    .addOnSuccessListener(aVoid -> callback.onResult(null))
+                    .addOnFailureListener(e -> {
+                        callback.onError(e);
+                    });
+        } catch (Exception e) {
+            callback.onError(e);
+        }
     }
 
     public static void buscarPacientePorCodigo(String codigo, Callback<DocumentSnapshot> callback) {

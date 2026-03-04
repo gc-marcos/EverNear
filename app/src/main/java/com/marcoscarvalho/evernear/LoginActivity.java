@@ -77,22 +77,24 @@ public class LoginActivity extends AppCompatActivity {
                             Log.d(TAG, "signInWithEmail:success");
                             FirebaseUser user = mAuth.getCurrentUser();
                             if (user != null) {
-                                // Se o usuário já existe, buscamos o tipo dele no Firestore
                                 db.collection("users").document(user.getUid()).get()
                                         .addOnSuccessListener(documentSnapshot -> {
                                             if (documentSnapshot.exists()) {
                                                 String tipo = documentSnapshot.getString("tipo");
                                                 direcionarUsuario(tipo);
                                             } else {
-                                                // Se por algum motivo não tiver os dados no Firestore, salva agora
                                                 saveUserRole(user);
                                             }
+                                        })
+                                        .addOnFailureListener(e -> {
+                                            Toast.makeText(LoginActivity.this, "Erro ao acessar banco de dados: " + e.getMessage(), Toast.LENGTH_LONG).show();
                                         });
                             }
                         } else {
+                            String errorMsg = task.getException() != null ? task.getException().getMessage() : "Erro desconhecido";
                             Log.w(TAG, "signInWithEmail:failure", task.getException());
-                            Toast.makeText(LoginActivity.this, "Authentication failed.",
-                                    Toast.LENGTH_SHORT).show();
+                            Toast.makeText(LoginActivity.this, "Falha na Autenticação: " + errorMsg,
+                                    Toast.LENGTH_LONG).show();
                         }
                     }
                 });
