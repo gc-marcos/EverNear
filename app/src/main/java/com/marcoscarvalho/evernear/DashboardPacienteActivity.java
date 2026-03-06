@@ -36,29 +36,39 @@ public class DashboardPacienteActivity extends AppCompatActivity {
     }
 
     private void carregarDados() {
+        if (uid == null) return;
+        
         db.collection("users").document(uid).get().addOnSuccessListener(documentSnapshot -> {
             if (documentSnapshot.exists()) {
                 String nome = documentSnapshot.getString("nome");
                 String codigo = documentSnapshot.getString("codigoVinculo");
                 String cuidadorId = documentSnapshot.getString("cuidadorVinculado");
 
-                tvWelcome.setText("Olá, " + nome);
-                tvCodigo.setText(codigo);
+                if (nome != null) tvWelcome.setText("Olá, " + nome);
+                if (codigo != null) {
+                    tvCodigo.setText(codigo);
+                    tvCodigo.setTextSize(54); // Garante que o código seja grande e visível
+                }
 
                 if (cuidadorId == null) {
                     tvStatus.setText("Compartilhe este código com seu cuidador");
+                    tvStatus.setTextColor(android.graphics.Color.parseColor("#9AA4B2"));
                 } else {
                     buscarNomeCuidador(cuidadorId);
                 }
 
                 btnShare.setOnClickListener(v -> {
-                    Intent sendIntent = new Intent();
-                    sendIntent.setAction(Intent.ACTION_SEND);
-                    sendIntent.putExtra(Intent.EXTRA_TEXT, "Meu código EverNear: " + codigo);
-                    sendIntent.setType("text/plain");
-                    startActivity(Intent.createChooser(sendIntent, null));
+                    if (codigo != null) {
+                        Intent sendIntent = new Intent();
+                        sendIntent.setAction(Intent.ACTION_SEND);
+                        sendIntent.putExtra(Intent.EXTRA_TEXT, "Meu código de vínculo EverNear: " + codigo);
+                        sendIntent.setType("text/plain");
+                        startActivity(Intent.createChooser(sendIntent, "Compartilhar via"));
+                    }
                 });
             }
+        }).addOnFailureListener(e -> {
+            Toast.makeText(this, "Erro ao carregar dados: " + e.getMessage(), Toast.LENGTH_SHORT).show();
         });
     }
 
