@@ -157,8 +157,14 @@ public class LoginActivity extends AppCompatActivity {
                             }
                         } else {
                             Log.w(TAG, "createUserWithEmail:failure", task.getException());
-                            Toast.makeText(LoginActivity.this, "Authentication failed: " + task.getException().getMessage(),
-                                    Toast.LENGTH_SHORT).show();
+                            String errorMsg = "Erro desconhecido";
+                            if (task.getException() != null) {
+                                errorMsg = task.getException().getLocalizedMessage();
+                                // Log detalhado do erro no Logcat
+                                Log.e(TAG, "Erro detalhado: ", task.getException());
+                            }
+                            Toast.makeText(LoginActivity.this, "Falha no cadastro: " + errorMsg,
+                                    Toast.LENGTH_LONG).show();
                         }
                     }
                 });

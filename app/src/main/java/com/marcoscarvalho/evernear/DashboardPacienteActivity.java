@@ -36,7 +36,10 @@ public class DashboardPacienteActivity extends AppCompatActivity {
     }
 
     private void carregarDados() {
-        if (uid == null) return;
+        if (uid == null) {
+            Toast.makeText(this, "Usuário não autenticado", Toast.LENGTH_SHORT).show();
+            return;
+        }
         
         db.collection("users").document(uid).get().addOnSuccessListener(documentSnapshot -> {
             if (documentSnapshot.exists()) {
@@ -45,10 +48,16 @@ public class DashboardPacienteActivity extends AppCompatActivity {
                 String cuidadorId = documentSnapshot.getString("cuidadorVinculado");
 
                 if (nome != null) tvWelcome.setText("Olá, " + nome);
-                if (codigo != null) {
+                
+                if (codigo != null && !codigo.isEmpty()) {
                     tvCodigo.setText(codigo);
-                    tvCodigo.setTextSize(54); // Garante que o código seja grande e visível
+                } else {
+                    // Se o código não existir, gera um novo e salva
+                    String novoCodigo = FirebaseHelper.gerarCodigoVinculo();
+                    db.collection("users").document(uid).update("codigoVinculo", novoCodigo);
+                    tvCodigo.setText(novoCodigo);
                 }
+                tvCodigo.setTextSize(54);
 
                 if (cuidadorId == null) {
                     tvStatus.setText("Compartilhe este código com seu cuidador");
@@ -58,17 +67,22 @@ public class DashboardPacienteActivity extends AppCompatActivity {
                 }
 
                 btnShare.setOnClickListener(v -> {
-                    if (codigo != null) {
+                    String codigoAtual = tvCodigo.getText().toString();
+                    if (!codigoAtual.isEmpty() && !codigoAtual.equals("ABC123")) {
                         Intent sendIntent = new Intent();
                         sendIntent.setAction(Intent.ACTION_SEND);
-                        sendIntent.putExtra(Intent.EXTRA_TEXT, "Meu código de vínculo EverNear: " + codigo);
+                        sendIntent.putExtra(Intent.EXTRA_TEXT, "Meu código de vínculo EverNear: " + codigoAtual);
                         sendIntent.setType("text/plain");
                         startActivity(Intent.createChooser(sendIntent, "Compartilhar via"));
+                    } else {
+                        Toast.makeText(this, "Código ainda não gerado", Toast.LENGTH_SHORT).show();
                     }
                 });
+            } else {
+                Toast.makeText(this, "Perfil não encontrado no banco de dados", Toast.LENGTH_LONG).show();
             }
         }).addOnFailureListener(e -> {
-            Toast.makeText(this, "Erro ao carregar dados: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "Erro ao carregar dados: " + e.getMessage(), Toast.LENGTH_LONG).show();
         });
     }
 
