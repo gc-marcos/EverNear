@@ -37,7 +37,8 @@ public class FirebaseHelper {
         user.put("tipo", tipo); // "paciente" ou "cuidador"
 
         if ("paciente".equals(tipo) || "patient".equals(tipo)) {
-            user.put("codigoVinculo", gerarCodigoVinculo());
+            String codigo = gerarCodigoVinculo();
+            user.put("codigoVinculo", codigo);
             user.put("cuidadorVinculado", null);
         } else {
             user.put("pacientesVinculados", new java.util.ArrayList<String>());
@@ -46,7 +47,10 @@ public class FirebaseHelper {
         try {
             db.collection("users").document(uid)
                     .set(user)
-                    .addOnSuccessListener(aVoid -> callback.onResult(null))
+                    .addOnSuccessListener(aVoid -> {
+                        // Garantir que o callback só é chamado após o sucesso da escrita
+                        callback.onResult(null);
+                    })
                     .addOnFailureListener(e -> {
                         callback.onError(e);
                     });

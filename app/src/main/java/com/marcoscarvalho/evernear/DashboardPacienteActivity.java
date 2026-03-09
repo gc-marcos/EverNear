@@ -41,8 +41,14 @@ public class DashboardPacienteActivity extends AppCompatActivity {
             return;
         }
         
-        db.collection("users").document(uid).get().addOnSuccessListener(documentSnapshot -> {
-            if (documentSnapshot.exists()) {
+        // Usar um listener em tempo real para garantir que a UI sempre reflita o Firestore
+        db.collection("users").document(uid).addSnapshotListener((documentSnapshot, e) -> {
+            if (e != null) {
+                Toast.makeText(this, "Erro ao carregar dados: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                return;
+            }
+
+            if (documentSnapshot != null && documentSnapshot.exists()) {
                 String nome = documentSnapshot.getString("nome");
                 String codigo = documentSnapshot.getString("codigoVinculo");
                 String cuidadorId = documentSnapshot.getString("cuidadorVinculado");
@@ -53,9 +59,9 @@ public class DashboardPacienteActivity extends AppCompatActivity {
                     tvCodigo.setText(codigo);
                 } else {
                     // Se o código não existir, gera um novo e salva
+                    // O snapshot listener será disparado novamente após o update
                     String novoCodigo = FirebaseHelper.gerarCodigoVinculo();
                     db.collection("users").document(uid).update("codigoVinculo", novoCodigo);
-                    tvCodigo.setText(novoCodigo);
                 }
                 tvCodigo.setTextSize(54);
 
@@ -81,8 +87,6 @@ public class DashboardPacienteActivity extends AppCompatActivity {
             } else {
                 Toast.makeText(this, "Perfil não encontrado no banco de dados", Toast.LENGTH_LONG).show();
             }
-        }).addOnFailureListener(e -> {
-            Toast.makeText(this, "Erro ao carregar dados: " + e.getMessage(), Toast.LENGTH_LONG).show();
         });
     }
 
