@@ -18,9 +18,6 @@ import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.FirebaseFirestore;
 
-import java.util.HashMap;
-import java.util.Map;
-
 public class LoginActivity extends AppCompatActivity {
 
     private static final String TAG = "LoginActivity";
@@ -81,9 +78,10 @@ public class LoginActivity extends AppCompatActivity {
                                         .addOnSuccessListener(documentSnapshot -> {
                                             if (documentSnapshot.exists()) {
                                                 String tipo = documentSnapshot.getString("tipo");
-                                                direcionarUsuario(tipo);
+                                                String codigoVinculo = documentSnapshot.getString("codigoVinculo");
+                                                direcionarUsuario(tipo, codigoVinculo);
                                             } else {
-                                                saveUserRole(user);
+                                                salvarNovoUsuario(user);
                                             }
                                         })
                                         .addOnFailureListener(e -> {
@@ -93,41 +91,51 @@ public class LoginActivity extends AppCompatActivity {
                         } else {
                             String errorMsg = task.getException() != null ? task.getException().getMessage() : "Erro desconhecido";
                             Log.w(TAG, "signInWithEmail:failure", task.getException());
-                            Toast.makeText(LoginActivity.this, "Falha na Autenticação: " + errorMsg,
+                            Toast.makeText(LoginActivity.this, "Falha na autenticação: " + errorMsg,
                                     Toast.LENGTH_LONG).show();
                         }
                     }
                 });
     }
 
-    private void direcionarUsuario(String tipo) {
+    /**
+     * Direciona o usuário para a tela correta após login ou cadastro.
+     * Para pacientes, passa o codigoVinculo via Intent para exibição imediata.
+     */
+    private void direcionarUsuario(String tipo, String codigoVinculo) {
         if ("patient".equals(tipo) || "paciente".equals(tipo)) {
-            startActivity(new Intent(LoginActivity.this, DashboardPacienteActivity.class));
+            Intent intent = new Intent(LoginActivity.this, DashboardPacienteActivity.class);
+            if (codigoVinculo != null && !codigoVinculo.isEmpty()) {
+                intent.putExtra("codigoVinculo", codigoVinculo);
+            }
+            startActivity(intent);
         } else {
             startActivity(new Intent(LoginActivity.this, DashboardCuidadorActivity.class));
         }
         finish();
     }
 
-    private void saveUserRole(FirebaseUser firebaseUser) {
-        if (firebaseUser != null && userType != null) {
-            String userId = firebaseUser.getUid();
-            String nome = "Usuário " + userId.substring(0, 4); 
+    private void salvarNovoUsuario(FirebaseUser firebaseUser) {
+        if (firebaseUser == null || userType == null) return;
 
-            FirebaseHelper.salvarUsuario(userId, nome, firebaseUser.getEmail(), userType, new FirebaseHelper.Callback<Void>() {
-                @Override
-                public void onResult(Void result) {
-                    direcionarUsuario(userType);
-                }
+        String userId = firebaseUser.getUid();
+        String nome = "Usuário " + userId.substring(0, 4);
 
-                @Override
-                public void onError(Exception e) {
-                    Toast.makeText(LoginActivity.this, "Erro ao salvar dados", Toast.LENGTH_SHORT).show();
-                }
-            });
-        }
+        FirebaseHelper.salvarUsuario(userId, nome, firebaseUser.getEmail(), userType,
+                new FirebaseHelper.Callback<String>() {
+                    @Override
+                    public void onResult(String codigoVinculo) {
+                        // codigoVinculo é o código gerado para paciente, ou null para cuidador
+                        direcionarUsuario(userType, codigoVinculo);
+                    }
+
+                    @Override
+                    public void onError(Exception e) {
+                        Log.e(TAG, "Erro ao salvar usuário: ", e);
+                        Toast.makeText(LoginActivity.this, "Erro ao salvar dados: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                    }
+                });
     }
-
 
     private void openCreateAccount() {
         String email = etEmailPhone.getText().toString().trim();
@@ -153,14 +161,13 @@ public class LoginActivity extends AppCompatActivity {
                             Log.d(TAG, "createUserWithEmail:success");
                             FirebaseUser user = mAuth.getCurrentUser();
                             if (user != null) {
-                                saveUserRole(user);
+                                salvarNovoUsuario(user);
                             }
                         } else {
                             Log.w(TAG, "createUserWithEmail:failure", task.getException());
                             String errorMsg = "Erro desconhecido";
                             if (task.getException() != null) {
                                 errorMsg = task.getException().getLocalizedMessage();
-                                // Log detalhado do erro no Logcat
                                 Log.e(TAG, "Erro detalhado: ", task.getException());
                             }
                             Toast.makeText(LoginActivity.this, "Falha no cadastro: " + errorMsg,

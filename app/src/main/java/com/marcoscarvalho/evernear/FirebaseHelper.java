@@ -1,10 +1,8 @@
 package com.marcoscarvalho.evernear;
 
-import com.google.android.gms.tasks.Task;
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FieldValue;
 import com.google.firebase.firestore.FirebaseFirestore;
-import com.google.firebase.firestore.QuerySnapshot;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -30,38 +28,41 @@ public class FirebaseHelper {
         return salt.toString();
     }
 
-    public static void salvarUsuario(String uid, String nome, String email, String tipo, Callback<Void> callback) {
+    /**
+     * Salva o usuário no Firestore.
+     * Para pacientes, o callback retorna o código de vínculo gerado (String).
+     * Para cuidadores, o callback retorna null.
+     */
+    public static void salvarUsuario(String uid, String nome, String email, String tipo, Callback<String> callback) {
         Map<String, Object> user = new HashMap<>();
         user.put("nome", nome);
         user.put("email", email);
-        user.put("tipo", tipo); // "paciente" ou "cuidador"
+        user.put("tipo", tipo);
 
+        String codigoGerado;
         if ("paciente".equals(tipo) || "patient".equals(tipo)) {
-            String codigo = gerarCodigoVinculo();
-            user.put("codigoVinculo", codigo);
+            codigoGerado = gerarCodigoVinculo();
+            user.put("codigoVinculo", codigoGerado);
             user.put("cuidadorVinculado", null);
         } else {
+            codigoGerado = null;
             user.put("pacientesVinculados", new java.util.ArrayList<String>());
         }
 
-        try {
-            db.collection("users").document(uid)
-                    .set(user)
-                    .addOnSuccessListener(aVoid -> {
-                        // Garantir que o callback só é chamado após o sucesso da escrita
-                        callback.onResult(null);
-                    })
-                    .addOnFailureListener(e -> {
-                        callback.onError(e);
-                    });
-        } catch (Exception e) {
-            callback.onError(e);
-        }
+        final String codigoFinal = codigoGerado;
+
+        db.collection("users").document(uid)
+                .set(user)
+                .addOnSuccessListener(aVoid -> {
+                    // Após confirmação do Firestore, retorna o código gerado (ou null para cuidador)
+                    callback.onResult(codigoFinal);
+                })
+                .addOnFailureListener(callback::onError);
     }
 
     public static void buscarPacientePorCodigo(String codigo, Callback<DocumentSnapshot> callback) {
+        // Busca pelo código em ambos os tipos possíveis ("patient" e "paciente")
         db.collection("users")
-                .whereEqualTo("tipo", "paciente")
                 .whereEqualTo("codigoVinculo", codigo)
                 .get()
                 .addOnSuccessListener(queryDocumentSnapshots -> {

@@ -9,8 +9,8 @@ import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.ListenerRegistration;
 
 public class DashboardPacienteActivity extends AppCompatActivity {
 
@@ -18,6 +18,7 @@ public class DashboardPacienteActivity extends AppCompatActivity {
     private Button btnShare;
     private FirebaseFirestore db;
     private String uid;
+    private ListenerRegistration listenerRegistration;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -32,69 +33,88 @@ public class DashboardPacienteActivity extends AppCompatActivity {
         db = FirebaseFirestore.getInstance();
         uid = FirebaseAuth.getInstance().getUid();
 
-        carregarDados();
+        // Exibe o código imediatamente se foi passado pela Intent (sem depender de rede)
+        String codigoViaIntent = getIntent().getStringExtra("codigoVinculo");
+        if (codigoViaIntent != null && !codigoViaIntent.isEmpty()) {
+            tvCodigo.setText(codigoViaIntent);
+            tvStatus.setText("Compartilhe este código com seu cuidador");
+            tvStatus.setTextColor(android.graphics.Color.parseColor("#9AA4B2"));
+            configurarBotaoCompartilhar(codigoViaIntent);
+        }
+
+        // Inicia o listener do Firestore para manter tudo sincronizado
+        iniciarListenerFirestore();
     }
 
-    private void carregarDados() {
+    private void iniciarListenerFirestore() {
         if (uid == null) {
             Toast.makeText(this, "Usuário não autenticado", Toast.LENGTH_SHORT).show();
             return;
         }
-        
-        // Usar um listener em tempo real para garantir que a UI sempre reflita o Firestore
-        db.collection("users").document(uid).addSnapshotListener((documentSnapshot, e) -> {
-            if (e != null) {
-                Toast.makeText(this, "Erro ao carregar dados: " + e.getMessage(), Toast.LENGTH_LONG).show();
-                return;
-            }
 
-            if (documentSnapshot != null && documentSnapshot.exists()) {
-                String nome = documentSnapshot.getString("nome");
-                String codigo = documentSnapshot.getString("codigoVinculo");
-                String cuidadorId = documentSnapshot.getString("cuidadorVinculado");
+        listenerRegistration = db.collection("users").document(uid)
+                .addSnapshotListener((snapshot, e) -> {
+                    if (e != null) {
+                        // Erro silencioso — o código da Intent já está exibido
+                        return;
+                    }
 
-                if (nome != null) tvWelcome.setText("Olá, " + nome);
-                
-                if (codigo != null && !codigo.isEmpty()) {
-                    tvCodigo.setText(codigo);
-                } else {
-                    // Se o código não existir, gera um novo e salva
-                    // O snapshot listener será disparado novamente após o update
-                    String novoCodigo = FirebaseHelper.gerarCodigoVinculo();
-                    db.collection("users").document(uid).update("codigoVinculo", novoCodigo);
-                }
-                tvCodigo.setTextSize(54);
+                    if (snapshot != null && snapshot.exists()) {
+                        String nome = snapshot.getString("nome");
+                        String codigo = snapshot.getString("codigoVinculo");
+                        String cuidadorId = snapshot.getString("cuidadorVinculado");
 
-                if (cuidadorId == null) {
-                    tvStatus.setText("Compartilhe este código com seu cuidador");
-                    tvStatus.setTextColor(android.graphics.Color.parseColor("#9AA4B2"));
-                } else {
-                    buscarNomeCuidador(cuidadorId);
-                }
+                        if (nome != null) {
+                            tvWelcome.setText("Olá, " + nome);
+                        }
 
-                btnShare.setOnClickListener(v -> {
-                    String codigoAtual = tvCodigo.getText().toString();
-                    if (!codigoAtual.isEmpty() && !codigoAtual.equals("ABC123")) {
-                        Intent sendIntent = new Intent();
-                        sendIntent.setAction(Intent.ACTION_SEND);
-                        sendIntent.putExtra(Intent.EXTRA_TEXT, "Meu código de vínculo EverNear: " + codigoAtual);
-                        sendIntent.setType("text/plain");
-                        startActivity(Intent.createChooser(sendIntent, "Compartilhar via"));
-                    } else {
-                        Toast.makeText(this, "Código ainda não gerado", Toast.LENGTH_SHORT).show();
+                        if (codigo != null && !codigo.isEmpty()) {
+                            // Atualiza a tela com o código confirmado pelo Firestore
+                            tvCodigo.setText(codigo);
+                            configurarBotaoCompartilhar(codigo);
+                        } else {
+                            // Código ausente: gera e salva um novo (o listener disparará novamente)
+                            String novoCodigo = FirebaseHelper.gerarCodigoVinculo();
+                            db.collection("users").document(uid)
+                                    .update("codigoVinculo", novoCodigo);
+                        }
+
+                        if (cuidadorId != null && !cuidadorId.isEmpty()) {
+                            buscarNomeCuidador(cuidadorId);
+                        } else {
+                            tvStatus.setText("Compartilhe este código com seu cuidador");
+                            tvStatus.setTextColor(android.graphics.Color.parseColor("#9AA4B2"));
+                        }
                     }
                 });
-            } else {
-                Toast.makeText(this, "Perfil não encontrado no banco de dados", Toast.LENGTH_LONG).show();
-            }
+    }
+
+    private void configurarBotaoCompartilhar(String codigo) {
+        btnShare.setOnClickListener(v -> {
+            Intent sendIntent = new Intent();
+            sendIntent.setAction(Intent.ACTION_SEND);
+            sendIntent.putExtra(Intent.EXTRA_TEXT, "Meu código de vínculo EverNear: " + codigo);
+            sendIntent.setType("text/plain");
+            startActivity(Intent.createChooser(sendIntent, "Compartilhar via"));
         });
     }
 
     private void buscarNomeCuidador(String cuidadorId) {
         db.collection("users").document(cuidadorId).get().addOnSuccessListener(doc -> {
             if (doc.exists()) {
-                tvStatus.setText("Vinculado a: " + doc.getString("nome"));
+                String nomeCuidador = doc.getString("nome");
+                tvStatus.setText("Vinculado a: " + (nomeCuidador != null ? nomeCuidador : "Cuidador"));
+                tvStatus.setTextColor(android.graphics.Color.parseColor("#4CAF50"));
             }
         });
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        // Remove o listener ao sair da tela para evitar vazamento de memória
+        if (listenerRegistration != null) {
+            listenerRegistration.remove();
+        }
     }
 }
