@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <uses-feature android:name="android.hardware.type.watch" />
+    <uses-feature android:name="android.hardware.type.watch" android:required="false" />
 
     <application
         android:allowBackup="true"
@@ -9,6 +9,8 @@
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.AppCompat.DayNight.NoActionBar">
+
+        <!-- Tela inicial: seleção de papel (paciente/cuidador) -->
         <activity
             android:name=".MainActivity"
             android:exported="true">
@@ -17,23 +19,38 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Login / Cadastro -->
         <activity
             android:name=".LoginActivity"
             android:exported="false"
-            android:theme="@style/Theme.EverNear.Login"
+            android:theme="@style/Theme.AppCompat.DayNight.NoActionBar"
             android:windowSoftInputMode="adjustResize" />
+
+        <!-- Tela principal do paciente (monitor cardíaco) -->
         <activity
-            android:name=".CaregiverActivity"
+            android:name=".PatientActivity"
             android:exported="false"
-            android:theme="@android:style/Theme.DeviceDefault.NoActionBar" />
+            android:theme="@style/Theme.AppCompat.DayNight.NoActionBar" />
+
+        <!-- Dashboard do paciente: exibe código de sincronização -->
         <activity
             android:name=".DashboardPacienteActivity"
             android:exported="false"
-            android:theme="@android:style/Theme.DeviceDefault.NoActionBar" />
+            android:theme="@style/Theme.AppCompat.DayNight.NoActionBar" />
+
+        <!-- Tela do cuidador -->
+        <activity
+            android:name=".CaregiverActivity"
+            android:exported="false"
+            android:theme="@style/Theme.AppCompat.DayNight.NoActionBar" />
+
+        <!-- Dashboard do cuidador: vincular paciente -->
         <activity
             android:name=".DashboardCuidadorActivity"
             android:exported="false"
             android:theme="@style/Theme.AppCompat.DayNight.NoActionBar" />
+
     </application>
 
 </manifest>

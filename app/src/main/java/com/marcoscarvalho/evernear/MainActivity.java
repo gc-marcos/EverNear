@@ -49,20 +49,22 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void verificarSessao() {
-        if (com.google.firebase.auth.FirebaseAuth.getInstance().getCurrentUser() != null) {
-            String uid = com.google.firebase.auth.FirebaseAuth.getInstance().getUid();
-            com.google.firebase.firestore.FirebaseFirestore.getInstance().collection("users").document(uid).get()
-                    .addOnSuccessListener(documentSnapshot -> {
-                        if (documentSnapshot.exists()) {
-                            String tipo = documentSnapshot.getString("tipo");
-                            if ("patient".equals(tipo)) {
-                                startActivity(new Intent(MainActivity.this, DashboardPacienteActivity.class));
-                            } else {
-                                startActivity(new Intent(MainActivity.this, DashboardCuidadorActivity.class));
-                            }
-                            finish();
+        if (com.google.firebase.auth.FirebaseAuth.getInstance().getCurrentUser() == null) return;
+
+        String uid = com.google.firebase.auth.FirebaseAuth.getInstance().getUid();
+        com.google.firebase.firestore.FirebaseFirestore.getInstance().collection("users").document(uid).get()
+                .addOnSuccessListener(documentSnapshot -> {
+                    if (documentSnapshot.exists()) {
+                        String tipo = documentSnapshot.getString("tipo");
+                        if ("patient".equals(tipo) || "paciente".equals(tipo)) {
+                            // Paciente já autenticado → vai direto para o monitor cardíaco
+                            startActivity(new Intent(MainActivity.this, PatientActivity.class));
+                        } else {
+                            // Cuidador já autenticado → vai para o dashboard do cuidador
+                            startActivity(new Intent(MainActivity.this, DashboardCuidadorActivity.class));
                         }
-                    });
-        }
+                        finish();
+                    }
+                });
     }
 }

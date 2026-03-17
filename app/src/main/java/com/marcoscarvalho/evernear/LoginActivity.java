@@ -78,18 +78,20 @@ public class LoginActivity extends AppCompatActivity {
                                         .addOnSuccessListener(documentSnapshot -> {
                                             if (documentSnapshot.exists()) {
                                                 String tipo = documentSnapshot.getString("tipo");
-                                                String codigoVinculo = documentSnapshot.getString("codigoVinculo");
-                                                direcionarUsuario(tipo, codigoVinculo);
+                                                direcionarAposLogin(tipo);
                                             } else {
                                                 salvarNovoUsuario(user);
                                             }
                                         })
                                         .addOnFailureListener(e -> {
-                                            Toast.makeText(LoginActivity.this, "Erro ao acessar banco de dados: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                                            Toast.makeText(LoginActivity.this,
+                                                    "Erro ao acessar banco de dados: " + e.getMessage(),
+                                                    Toast.LENGTH_LONG).show();
                                         });
                             }
                         } else {
-                            String errorMsg = task.getException() != null ? task.getException().getMessage() : "Erro desconhecido";
+                            String errorMsg = task.getException() != null
+                                    ? task.getException().getMessage() : "Erro desconhecido";
                             Log.w(TAG, "signInWithEmail:failure", task.getException());
                             Toast.makeText(LoginActivity.this, "Falha na autenticação: " + errorMsg,
                                     Toast.LENGTH_LONG).show();
@@ -99,16 +101,13 @@ public class LoginActivity extends AppCompatActivity {
     }
 
     /**
-     * Direciona o usuário para a tela correta após login ou cadastro.
-     * Para pacientes, passa o codigoVinculo via Intent para exibição imediata.
+     * Após o login bem-sucedido, redireciona para a tela correta conforme o tipo do usuário.
+     * Paciente → PatientActivity (monitor cardíaco)
+     * Cuidador → DashboardCuidadorActivity
      */
-    private void direcionarUsuario(String tipo, String codigoVinculo) {
+    private void direcionarAposLogin(String tipo) {
         if ("patient".equals(tipo) || "paciente".equals(tipo)) {
-            Intent intent = new Intent(LoginActivity.this, DashboardPacienteActivity.class);
-            if (codigoVinculo != null && !codigoVinculo.isEmpty()) {
-                intent.putExtra("codigoVinculo", codigoVinculo);
-            }
-            startActivity(intent);
+            startActivity(new Intent(LoginActivity.this, PatientActivity.class));
         } else {
             startActivity(new Intent(LoginActivity.this, DashboardCuidadorActivity.class));
         }
@@ -125,14 +124,15 @@ public class LoginActivity extends AppCompatActivity {
                 new FirebaseHelper.Callback<String>() {
                     @Override
                     public void onResult(String codigoVinculo) {
-                        // codigoVinculo é o código gerado para paciente, ou null para cuidador
-                        direcionarUsuario(userType, codigoVinculo);
+                        // Após salvar, redireciona para a tela principal conforme o tipo
+                        direcionarAposLogin(userType);
                     }
 
                     @Override
                     public void onError(Exception e) {
                         Log.e(TAG, "Erro ao salvar usuário: ", e);
-                        Toast.makeText(LoginActivity.this, "Erro ao salvar dados: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                        Toast.makeText(LoginActivity.this,
+                                "Erro ao salvar dados: " + e.getMessage(), Toast.LENGTH_LONG).show();
                     }
                 });
     }
@@ -161,6 +161,7 @@ public class LoginActivity extends AppCompatActivity {
                             Log.d(TAG, "createUserWithEmail:success");
                             FirebaseUser user = mAuth.getCurrentUser();
                             if (user != null) {
+                                // Salva o usuário no Firestore e redireciona para a tela principal
                                 salvarNovoUsuario(user);
                             }
                         } else {

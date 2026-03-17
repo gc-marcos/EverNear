@@ -15,7 +15,7 @@
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginTop="16dp"/>
+        android:layout_marginTop="16dp" />
 
     <TextView
         android:id="@+id/tv_bpm_value"
@@ -27,7 +27,7 @@
         app:layout_constraintTop_toBottomOf="@id/iv_heart_icon"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginTop="8dp"/>
+        android:layout_marginTop="8dp" />
 
     <TextView
         android:id="@+id/tv_bpm_label"
@@ -38,7 +38,7 @@
         android:textColor="@android:color/white"
         app:layout_constraintTop_toBottomOf="@id/tv_bpm_value"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"/>
+        app:layout_constraintEnd_toEndOf="parent" />
 
     <TextView
         android:id="@+id/tv_status"
@@ -50,8 +50,24 @@
         app:layout_constraintTop_toBottomOf="@id/tv_bpm_label"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginTop="16dp"/>
+        android:layout_marginTop="16dp" />
 
+    <!-- Botão para ver o código de sincronização com o cuidador -->
+    <Button
+        android:id="@+id/btn_ver_codigo"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="Ver Código de Sincronização"
+        android:backgroundTint="#1F6FEB"
+        android:textColor="@android:color/white"
+        app:layout_constraintBottom_toTopOf="@id/btn_emergency"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="8dp" />
+
+    <!-- Botão de emergência -->
     <Button
         android:id="@+id/btn_emergency"
         android:layout_width="0dp"
@@ -65,6 +81,6 @@
         android:layout_marginStart="16dp"
         android:layout_marginEnd="16dp"
         android:layout_marginBottom="16dp"
-        app:icon="@android:drawable/ic_dialog_alert"/>
+        app:icon="@android:drawable/ic_dialog_alert" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>
