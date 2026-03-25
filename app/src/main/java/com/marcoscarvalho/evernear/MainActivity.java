@@ -11,6 +11,9 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.firestore.FirebaseFirestore;
+
 public class MainActivity extends AppCompatActivity {
 
     @Override
@@ -27,44 +30,39 @@ public class MainActivity extends AppCompatActivity {
         ImageButton patientButton = findViewById(R.id.btn_patient);
         ImageButton caregiverButton = findViewById(R.id.btn_caregiver);
 
-        patientButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                Intent intent = new Intent(MainActivity.this, LoginActivity.class);
-                intent.putExtra("userType", "patient");
-                startActivity(intent);
-            }
+        patientButton.setOnClickListener(v -> {
+            Intent intent = new Intent(MainActivity.this, LoginActivity.class);
+            intent.putExtra("userType", "patient");
+            startActivity(intent);
         });
 
-        caregiverButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                Intent intent = new Intent(MainActivity.this, LoginActivity.class);
-                intent.putExtra("userType", "caregiver");
-                startActivity(intent);
-            }
+        caregiverButton.setOnClickListener(v -> {
+            Intent intent = new Intent(MainActivity.this, LoginActivity.class);
+            intent.putExtra("userType", "caregiver");
+            startActivity(intent);
         });
 
+        // Verifica se já existe sessão ativa e redireciona, pulando o login
         verificarSessao();
     }
 
     private void verificarSessao() {
-        if (com.google.firebase.auth.FirebaseAuth.getInstance().getCurrentUser() == null) return;
+        if (FirebaseAuth.getInstance().getCurrentUser() == null) return;
 
-        String uid = com.google.firebase.auth.FirebaseAuth.getInstance().getUid();
-        com.google.firebase.firestore.FirebaseFirestore.getInstance().collection("users").document(uid).get()
-                .addOnSuccessListener(documentSnapshot -> {
-                    if (documentSnapshot.exists()) {
-                        String tipo = documentSnapshot.getString("tipo");
-                        if ("patient".equals(tipo) || "paciente".equals(tipo)) {
-                            // Paciente já autenticado → vai direto para o monitor cardíaco
-                            startActivity(new Intent(MainActivity.this, PatientActivity.class));
-                        } else {
-                            // Cuidador já autenticado → vai para o dashboard do cuidador
-                            startActivity(new Intent(MainActivity.this, DashboardCuidadorActivity.class));
-                        }
-                        finish();
+        String uid = FirebaseAuth.getInstance().getUid();
+        FirebaseFirestore.getInstance().collection("users").document(uid).get()
+                .addOnSuccessListener(doc -> {
+                    if (!doc.exists()) return;
+
+                    String tipo = doc.getString("tipo");
+                    if ("patient".equals(tipo) || "paciente".equals(tipo)) {
+                        // Paciente autenticado → monitor cardíaco
+                        startActivity(new Intent(MainActivity.this, PatientActivity.class));
+                    } else {
+                        // Cuidador autenticado → tela de monitoramento do cuidador
+                        startActivity(new Intent(MainActivity.this, CaregiverActivity.class));
                     }
+                    finish();
                 });
     }
 }

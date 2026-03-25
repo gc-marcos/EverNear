@@ -60,6 +60,25 @@
             app:layout_constraintWidth_max="@dimen/login_card_max_width"
             android:layout_marginTop="@dimen/login_card_margin_top">
 
+            <!-- Nome completo (visível apenas no modo cadastro) -->
+            <EditText
+                android:id="@+id/et_nome"
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/login_input_height"
+                android:background="@drawable/bg_input_login"
+                android:drawableStart="@drawable/ic_email_phone"
+                android:drawablePadding="@dimen/login_input_drawable_padding"
+                android:gravity="center_vertical"
+                android:hint="Seu nome completo"
+                android:inputType="textPersonName|textCapWords"
+                android:paddingStart="@dimen/login_input_padding_h"
+                android:paddingEnd="@dimen/login_input_padding_h"
+                android:textColor="@color/login_text_primary"
+                android:textColorHint="@color/login_text_secondary"
+                android:textSize="@dimen/login_input_text_size"
+                android:layout_marginBottom="@dimen/login_input_margin_bottom"
+                android:visibility="gone" />
+
             <!-- Email ou telefone (campo cápsula) -->
             <EditText
                 android:id="@+id/et_email_phone"

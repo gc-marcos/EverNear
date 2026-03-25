@@ -60,6 +60,16 @@ public class FirebaseHelper {
                 .addOnFailureListener(callback::onError);
     }
 
+    /**
+     * Salva ou atualiza o apelido do usuário no Firestore.
+     */
+    public static void salvarApelido(String uid, String apelido, Callback<Void> callback) {
+        db.collection("users").document(uid)
+                .update("apelido", apelido)
+                .addOnSuccessListener(aVoid -> callback.onResult(null))
+                .addOnFailureListener(callback::onError);
+    }
+
     public static void buscarPacientePorCodigo(String codigo, Callback<DocumentSnapshot> callback) {
         // Busca pelo código em ambos os tipos possíveis ("patient" e "paciente")
         db.collection("users")

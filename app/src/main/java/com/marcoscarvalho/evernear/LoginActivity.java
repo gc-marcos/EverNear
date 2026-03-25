@@ -3,6 +3,7 @@ package com.marcoscarvalho.evernear;
 import android.content.Intent;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
@@ -22,6 +23,7 @@ public class LoginActivity extends AppCompatActivity {
 
     private static final String TAG = "LoginActivity";
 
+    private EditText etNome;
     private EditText etEmailPhone;
     private EditText etPassword;
     private Button btnLogin;
@@ -30,6 +32,7 @@ public class LoginActivity extends AppCompatActivity {
     private FirebaseAuth mAuth;
     private FirebaseFirestore db;
     private String userType;
+    private boolean isModoCadastro = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -41,27 +44,52 @@ public class LoginActivity extends AppCompatActivity {
         mAuth = FirebaseAuth.getInstance();
         db = FirebaseFirestore.getInstance();
 
+        etNome = findViewById(R.id.et_nome);
         etEmailPhone = findViewById(R.id.et_email_phone);
         etPassword = findViewById(R.id.et_password);
         btnLogin = findViewById(R.id.btn_login);
         tvCreateAccount = findViewById(R.id.tv_create_account);
 
-        btnLogin.setOnClickListener(v -> attemptLogin());
-        tvCreateAccount.setOnClickListener(v -> openCreateAccount());
+        btnLogin.setOnClickListener(v -> {
+            if (isModoCadastro) {
+                realizarCadastro();
+            } else {
+                realizarLogin();
+            }
+        });
+
+        tvCreateAccount.setOnClickListener(v -> alternarModo());
     }
 
-    private void attemptLogin() {
+    private void alternarModo() {
+        isModoCadastro = !isModoCadastro;
+
+        if (isModoCadastro) {
+            // Modo cadastro: exibe o campo de nome
+            etNome.setVisibility(View.VISIBLE);
+            etNome.requestFocus();
+            btnLogin.setText("CADASTRAR");
+            tvCreateAccount.setText("Já tenho conta → Entrar");
+        } else {
+            // Modo login: oculta o campo de nome
+            etNome.setVisibility(View.GONE);
+            etNome.setText("");
+            btnLogin.setText("ENTRAR");
+            tvCreateAccount.setText("Primeiro acesso? Criar conta");
+        }
+    }
+
+    private void realizarLogin() {
         String email = etEmailPhone.getText().toString().trim();
         String password = etPassword.getText().toString().trim();
 
         if (email.isEmpty()) {
-            etEmailPhone.setError(getString(R.string.login_hint_email_phone));
+            etEmailPhone.setError("Informe o e-mail");
             etEmailPhone.requestFocus();
             return;
         }
-
         if (password.isEmpty()) {
-            etPassword.setError(getString(R.string.login_hint_password));
+            etPassword.setError("Informe a senha");
             etPassword.requestFocus();
             return;
         }
@@ -75,80 +103,57 @@ public class LoginActivity extends AppCompatActivity {
                             FirebaseUser user = mAuth.getCurrentUser();
                             if (user != null) {
                                 db.collection("users").document(user.getUid()).get()
-                                        .addOnSuccessListener(documentSnapshot -> {
-                                            if (documentSnapshot.exists()) {
-                                                String tipo = documentSnapshot.getString("tipo");
-                                                direcionarAposLogin(tipo);
+                                        .addOnSuccessListener(doc -> {
+                                            if (doc.exists()) {
+                                                direcionarAposLogin(doc.getString("tipo"));
                                             } else {
-                                                salvarNovoUsuario(user);
+                                                // Sem perfil no Firestore: cria agora
+                                                criarPerfilFirestore(user, "Usuário");
                                             }
                                         })
-                                        .addOnFailureListener(e -> {
-                                            Toast.makeText(LoginActivity.this,
-                                                    "Erro ao acessar banco de dados: " + e.getMessage(),
-                                                    Toast.LENGTH_LONG).show();
-                                        });
+                                        .addOnFailureListener(e -> Toast.makeText(LoginActivity.this,
+                                                "Erro ao acessar banco de dados: " + e.getMessage(),
+                                                Toast.LENGTH_LONG).show());
                             }
                         } else {
-                            String errorMsg = task.getException() != null
+                            String msg = task.getException() != null
                                     ? task.getException().getMessage() : "Erro desconhecido";
                             Log.w(TAG, "signInWithEmail:failure", task.getException());
-                            Toast.makeText(LoginActivity.this, "Falha na autenticação: " + errorMsg,
+                            Toast.makeText(LoginActivity.this, "Falha no login: " + msg,
                                     Toast.LENGTH_LONG).show();
                         }
                     }
                 });
     }
 
-    /**
-     * Após o login bem-sucedido, redireciona para a tela correta conforme o tipo do usuário.
-     * Paciente → PatientActivity (monitor cardíaco)
-     * Cuidador → DashboardCuidadorActivity
-     */
-    private void direcionarAposLogin(String tipo) {
-        if ("patient".equals(tipo) || "paciente".equals(tipo)) {
-            startActivity(new Intent(LoginActivity.this, PatientActivity.class));
-        } else {
-            startActivity(new Intent(LoginActivity.this, DashboardCuidadorActivity.class));
-        }
-        finish();
-    }
-
-    private void salvarNovoUsuario(FirebaseUser firebaseUser) {
-        if (firebaseUser == null || userType == null) return;
-
-        String userId = firebaseUser.getUid();
-        String nome = "Usuário " + userId.substring(0, 4);
-
-        FirebaseHelper.salvarUsuario(userId, nome, firebaseUser.getEmail(), userType,
-                new FirebaseHelper.Callback<String>() {
-                    @Override
-                    public void onResult(String codigoVinculo) {
-                        // Após salvar, redireciona para a tela principal conforme o tipo
-                        direcionarAposLogin(userType);
-                    }
-
-                    @Override
-                    public void onError(Exception e) {
-                        Log.e(TAG, "Erro ao salvar usuário: ", e);
-                        Toast.makeText(LoginActivity.this,
-                                "Erro ao salvar dados: " + e.getMessage(), Toast.LENGTH_LONG).show();
-                    }
-                });
-    }
-
-    private void openCreateAccount() {
+    private void realizarCadastro() {
+        String nome = etNome.getText().toString().trim();
         String email = etEmailPhone.getText().toString().trim();
         String password = etPassword.getText().toString().trim();
 
+        // Validações
+        if (nome.isEmpty()) {
+            etNome.setError("Informe seu nome completo");
+            etNome.requestFocus();
+            return;
+        }
+        if (nome.length() < 2) {
+            etNome.setError("Nome deve ter ao menos 2 caracteres");
+            etNome.requestFocus();
+            return;
+        }
         if (email.isEmpty()) {
-            etEmailPhone.setError(getString(R.string.login_hint_email_phone));
+            etEmailPhone.setError("Informe o e-mail");
             etEmailPhone.requestFocus();
             return;
         }
-
         if (password.isEmpty()) {
-            etPassword.setError(getString(R.string.login_hint_password));
+            etPassword.setError("Informe a senha");
+            etPassword.requestFocus();
+            return;
+        }
+        if (password.length() < 6) {
+            etPassword.setError("A senha deve ter pelo menos 6 caracteres");
             etPassword.requestFocus();
             return;
         }
@@ -161,20 +166,52 @@ public class LoginActivity extends AppCompatActivity {
                             Log.d(TAG, "createUserWithEmail:success");
                             FirebaseUser user = mAuth.getCurrentUser();
                             if (user != null) {
-                                // Salva o usuário no Firestore e redireciona para a tela principal
-                                salvarNovoUsuario(user);
+                                criarPerfilFirestore(user, nome);
                             }
                         } else {
                             Log.w(TAG, "createUserWithEmail:failure", task.getException());
-                            String errorMsg = "Erro desconhecido";
-                            if (task.getException() != null) {
-                                errorMsg = task.getException().getLocalizedMessage();
-                                Log.e(TAG, "Erro detalhado: ", task.getException());
-                            }
-                            Toast.makeText(LoginActivity.this, "Falha no cadastro: " + errorMsg,
+                            String msg = task.getException() != null
+                                    ? task.getException().getLocalizedMessage() : "Erro desconhecido";
+                            Log.e(TAG, "Erro detalhado: ", task.getException());
+                            Toast.makeText(LoginActivity.this, "Falha no cadastro: " + msg,
                                     Toast.LENGTH_LONG).show();
                         }
                     }
                 });
+    }
+
+    private void criarPerfilFirestore(FirebaseUser firebaseUser, String nome) {
+        if (firebaseUser == null || userType == null) return;
+
+        FirebaseHelper.salvarUsuario(
+                firebaseUser.getUid(),
+                nome,
+                firebaseUser.getEmail(),
+                userType,
+                new FirebaseHelper.Callback<String>() {
+                    @Override
+                    public void onResult(String codigoVinculo) {
+                        direcionarAposLogin(userType);
+                    }
+
+                    @Override
+                    public void onError(Exception e) {
+                        Log.e(TAG, "Erro ao salvar perfil: ", e);
+                        Toast.makeText(LoginActivity.this,
+                                "Erro ao salvar perfil: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                    }
+                });
+    }
+
+    /**
+     * Paciente → PatientActivity | Cuidador → CaregiverActivity
+     */
+    private void direcionarAposLogin(String tipo) {
+        if ("patient".equals(tipo) || "paciente".equals(tipo)) {
+            startActivity(new Intent(LoginActivity.this, PatientActivity.class));
+        } else {
+            startActivity(new Intent(LoginActivity.this, CaregiverActivity.class));
+        }
+        finish();
     }
 }
