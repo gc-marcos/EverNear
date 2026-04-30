@@ -10,32 +10,17 @@ import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
 
-import androidx.health.services.client.HealthServices;
-import androidx.health.services.client.HealthServicesClient;
-import androidx.health.services.client.MeasureCallback;
-import androidx.health.services.client.MeasureClient;
-import androidx.health.services.client.data.Availability;
-import androidx.health.services.client.data.DataPointContainer;
-import androidx.health.services.client.data.DataType;
-import androidx.health.services.client.data.DataTypeAvailability;
-import androidx.health.services.client.data.MeasureCapabilities;
-import androidx.health.services.client.data.SampleDataPoint;
-
-import com.google.common.util.concurrent.FutureCallback;
-import com.google.common.util.concurrent.Futures;
-import com.google.common.util.concurrent.ListenableFuture;
-import com.google.common.util.concurrent.MoreExecutors;
-
-import java.util.List;
 import java.util.Random;
 
 /**
- * Monitor de frequência cardíaca em tempo real.
+ * Monitor de frequência cardíaca em tempo real para Wear OS 2 (Android 9.1, API 28).
  *
- * Estratégia (em cascata, escolhendo a primeira disponível):
- *  1. Health Services API (Wear OS) — preferencial em smartwatches
- *  2. SensorManager TYPE_HEART_RATE — fallback para wearables Android
- *  3. Simulador — para emuladores e dispositivos sem sensor
+ * Usa android.hardware.SensorManager com Sensor.TYPE_HEART_RATE — solução nativa
+ * suportada por todos os smartwatches com sensor cardíaco e disponível desde a API 20.
+ *
+ * Estratégia em cascata:
+ *  1. SensorManager TYPE_HEART_RATE — preferencial em qualquer wearable Android
+ *  2. Simulador — para emuladores e dispositivos sem sensor
  *
  * Calibração:
  *  - Coleta automática nas primeiras N leituras → cria baseline
@@ -84,17 +69,12 @@ public class HeartRateMonitor implements SensorEventListener {
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final SharedPreferences prefs;
 
-    // Health Services
-    private MeasureClient measureClient;
-    private MeasureCallback hsCallback;
-    private boolean usingHealthServices = false;
-
-    // Sensor fallback
+    // Sensor
     private SensorManager sensorManager;
     private Sensor heartRateSensor;
     private boolean usingSensor = false;
 
-    // Simulator fallback
+    // Simulador (fallback)
     private Runnable simulatorRunnable;
     private final Random random = new Random();
     private int simulatorBpm = 75;
@@ -114,7 +94,7 @@ public class HeartRateMonitor implements SensorEventListener {
     private long lastAlertTime = 0;
     private AnomalyType lastAnomalyType = null;
 
-    // Throttle de UI/Firestore
+    // Throttle de leituras (economia de bateria + processamento)
     private long lastReadingTime = 0;
     private static final long MIN_READING_INTERVAL_MS = 1000L; // máx 1 leitura/seg
 
@@ -154,10 +134,6 @@ public class HeartRateMonitor implements SensorEventListener {
 
     /** Inicia o monitoramento (escolhe a melhor estratégia disponível). */
     public void iniciar() {
-        if (tentarHealthServices()) {
-            Log.d(TAG, "Usando Health Services API");
-            return;
-        }
         if (tentarSensorManager()) {
             Log.d(TAG, "Usando SensorManager (TYPE_HEART_RATE)");
             return;
@@ -167,13 +143,6 @@ public class HeartRateMonitor implements SensorEventListener {
     }
 
     public void parar() {
-        if (usingHealthServices && measureClient != null && hsCallback != null) {
-            try {
-                measureClient.unregisterMeasureCallbackAsync(DataType.HEART_RATE_BPM, hsCallback);
-            } catch (Exception e) {
-                Log.e(TAG, "Erro ao desregistrar Health Services", e);
-            }
-        }
         if (usingSensor && sensorManager != null) {
             sensorManager.unregisterListener(this);
         }
@@ -181,98 +150,70 @@ public class HeartRateMonitor implements SensorEventListener {
             mainHandler.removeCallbacks(simulatorRunnable);
             simulatorRunnable = null;
         }
-        usingHealthServices = false;
         usingSensor = false;
     }
 
-    // ==================== Health Services API (Wear OS) ====================
+    // ==================== SensorManager (Wear OS / Android nativo) ====================
 
-    private boolean tentarHealthServices() {
+    private boolean tentarSensorManager() {
         try {
-            HealthServicesClient client = HealthServices.getClient(context);
-            measureClient = client.getMeasureClient();
+            sensorManager = (SensorManager) context.getSystemService(Context.SENSOR_SERVICE);
+            if (sensorManager == null) {
+                Log.w(TAG, "SensorManager indisponível");
+                return false;
+            }
+            heartRateSensor = sensorManager.getDefaultSensor(Sensor.TYPE_HEART_RATE);
+            if (heartRateSensor == null) {
+                Log.w(TAG, "Sensor TYPE_HEART_RATE não encontrado neste dispositivo");
+                return false;
+            }
 
-            ListenableFuture<MeasureCapabilities> future = measureClient.getCapabilitiesAsync();
-            Futures.addCallback(future, new FutureCallback<MeasureCapabilities>() {
-                @Override
-                public void onSuccess(MeasureCapabilities capabilities) {
-                    if (capabilities != null
-                            && capabilities.getSupportedDataTypesMeasure().contains(DataType.HEART_RATE_BPM)) {
-                        registrarHealthServicesCallback();
-                    } else {
-                        Log.w(TAG, "HEART_RATE_BPM não suportado — fallback");
-                        if (!tentarSensorManager()) iniciarSimulador();
-                    }
-                }
-                @Override
-                public void onFailure(Throwable t) {
-                    Log.e(TAG, "Falha ao obter capabilities — fallback", t);
-                    if (!tentarSensorManager()) iniciarSimulador();
-                }
-            }, MoreExecutors.directExecutor());
-
-            return true;
-        } catch (Throwable t) {
-            Log.w(TAG, "Health Services indisponível: " + t.getMessage());
+            // SENSOR_DELAY_NORMAL ≈ 200ms entre leituras → bom equilíbrio bateria/responsividade
+            boolean ok = sensorManager.registerListener(
+                    this, heartRateSensor, SensorManager.SENSOR_DELAY_NORMAL);
+            if (ok) {
+                usingSensor = true;
+                notifyStatus("Sensor cardíaco ativo");
+                return true;
+            }
+            Log.w(TAG, "registerListener retornou false");
+            return false;
+        } catch (Exception e) {
+            Log.e(TAG, "Erro ao iniciar SensorManager", e);
             return false;
         }
     }
 
-    private void registrarHealthServicesCallback() {
-        hsCallback = new MeasureCallback() {
-            @Override
-            public void onAvailabilityChanged(DataType<?, ?> dataType, Availability availability) {
-                if (availability instanceof DataTypeAvailability) {
-                    DataTypeAvailability dta = (DataTypeAvailability) availability;
-                    notifyStatus("Sensor: " + dta.toString());
-                }
-            }
-            @Override
-            public void onDataReceived(DataPointContainer data) {
-                List<SampleDataPoint<Double>> pontos = data.getData(DataType.HEART_RATE_BPM);
-                for (SampleDataPoint<Double> p : pontos) {
-                    int bpm = (int) Math.round(p.getValue());
-                    if (bpm > 0) processarLeitura(bpm);
-                }
-            }
-        };
-        try {
-            measureClient.registerMeasureCallback(DataType.HEART_RATE_BPM, hsCallback);
-            usingHealthServices = true;
-            notifyStatus("Conectado ao sensor cardíaco");
-        } catch (Exception e) {
-            Log.e(TAG, "Falha ao registrar callback Health Services", e);
-            if (!tentarSensorManager()) iniciarSimulador();
-        }
-    }
-
-    // ==================== SensorManager Fallback ====================
-
-    private boolean tentarSensorManager() {
-        sensorManager = (SensorManager) context.getSystemService(Context.SENSOR_SERVICE);
-        if (sensorManager == null) return false;
-        heartRateSensor = sensorManager.getDefaultSensor(Sensor.TYPE_HEART_RATE);
-        if (heartRateSensor == null) return false;
-
-        boolean ok = sensorManager.registerListener(this, heartRateSensor, SensorManager.SENSOR_DELAY_NORMAL);
-        if (ok) {
-            usingSensor = true;
-            notifyStatus("Sensor cardíaco ativo");
-            return true;
-        }
-        return false;
-    }
-
     @Override
     public void onSensorChanged(SensorEvent event) {
-        if (event.sensor.getType() == Sensor.TYPE_HEART_RATE && event.values.length > 0) {
-            int bpm = (int) event.values[0];
-            if (bpm > 0) processarLeitura(bpm);
-        }
+        if (event.sensor.getType() != Sensor.TYPE_HEART_RATE) return;
+        if (event.values.length == 0) return;
+
+        int bpm = (int) event.values[0];
+        if (bpm <= 0) return; // valores 0 indicam que o sensor ainda não está pronto/contato ruim
+
+        processarLeitura(bpm);
     }
 
     @Override
-    public void onAccuracyChanged(Sensor sensor, int accuracy) { /* no-op */ }
+    public void onAccuracyChanged(Sensor sensor, int accuracy) {
+        if (sensor.getType() != Sensor.TYPE_HEART_RATE) return;
+        switch (accuracy) {
+            case SensorManager.SENSOR_STATUS_NO_CONTACT:
+                notifyStatus("Sem contato com a pele");
+                break;
+            case SensorManager.SENSOR_STATUS_UNRELIABLE:
+                notifyStatus("Leitura instável — ajuste o relógio");
+                break;
+            case SensorManager.SENSOR_STATUS_ACCURACY_LOW:
+                notifyStatus("Precisão baixa");
+                break;
+            case SensorManager.SENSOR_STATUS_ACCURACY_MEDIUM:
+            case SensorManager.SENSOR_STATUS_ACCURACY_HIGH:
+                notifyStatus("Sensor cardíaco ativo");
+                break;
+        }
+    }
 
     // ==================== Simulador (apenas testes) ====================
 
@@ -285,6 +226,7 @@ public class HeartRateMonitor implements SensorEventListener {
                 int delta = random.nextInt(11) - 5;
                 simulatorBpm = Math.max(45, Math.min(160, simulatorBpm + delta));
                 if (random.nextInt(50) == 0) simulatorBpm += random.nextInt(40) - 20; // ocasional
+                simulatorBpm = Math.max(40, Math.min(180, simulatorBpm));
                 processarLeitura(simulatorBpm);
                 mainHandler.postDelayed(this, 2000);
             }
