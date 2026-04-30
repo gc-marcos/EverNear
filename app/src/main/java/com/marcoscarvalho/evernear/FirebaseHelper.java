@@ -96,4 +96,52 @@ public class FirebaseHelper {
                 })
                 .addOnFailureListener(callback::onError);
     }
+
+    /**
+     * Atualiza o BPM atual do paciente no Firestore (em tempo real).
+     * Usado para o cuidador acompanhar continuamente.
+     */
+    public static void atualizarBpm(String uidPaciente, int bpm) {
+        Map<String, Object> updates = new HashMap<>();
+        updates.put("ultimoBpm", bpm);
+        updates.put("ultimoBpmTimestamp", FieldValue.serverTimestamp());
+        db.collection("users").document(uidPaciente).update(updates);
+        // Sem callback intencionalmente — chamadas frequentes/silenciosas
+    }
+
+    /**
+     * Salva os limites de calibração no perfil do paciente.
+     */
+    public static void salvarBaseline(String uidPaciente, int baseline, int min, int max) {
+        Map<String, Object> updates = new HashMap<>();
+        updates.put("bpmBaseline", baseline);
+        updates.put("bpmMin", min);
+        updates.put("bpmMax", max);
+        db.collection("users").document(uidPaciente).update(updates);
+    }
+
+    /**
+     * Cria um documento de alerta na coleção `alerts/`, vinculado ao cuidador,
+     * para que ele receba a notificação em tempo real via snapshot listener.
+     */
+    public static void enviarAlerta(String uidPaciente, String nomePaciente,
+                                     String uidCuidador, int bpm, String tipo,
+                                     Callback<String> callback) {
+        Map<String, Object> alerta = new HashMap<>();
+        alerta.put("pacienteId", uidPaciente);
+        alerta.put("pacienteNome", nomePaciente);
+        alerta.put("cuidadorId", uidCuidador);
+        alerta.put("bpm", bpm);
+        alerta.put("tipo", tipo); // "HIGH" ou "LOW"
+        alerta.put("timestamp", FieldValue.serverTimestamp());
+        alerta.put("acknowledged", false);
+
+        db.collection("alerts").add(alerta)
+                .addOnSuccessListener(docRef -> {
+                    if (callback != null) callback.onResult(docRef.getId());
+                })
+                .addOnFailureListener(e -> {
+                    if (callback != null) callback.onError(e);
+                });
+    }
 }

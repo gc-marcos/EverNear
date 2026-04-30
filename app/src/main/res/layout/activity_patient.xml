@@ -21,7 +21,7 @@
         android:id="@+id/tv_bpm_value"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="78"
+        android:text="--"
         android:textSize="48sp"
         android:textColor="@android:color/white"
         app:layout_constraintTop_toBottomOf="@id/iv_heart_icon"
@@ -44,13 +44,44 @@
         android:id="@+id/tv_status"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Normal"
-        android:textColor="#00FF00"
-        android:textSize="18sp"
+        android:text="Aguardando sensor..."
+        android:textColor="#9AA4B2"
+        android:textSize="14sp"
+        android:gravity="center"
         app:layout_constraintTop_toBottomOf="@id/tv_bpm_label"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginTop="16dp" />
+        android:layout_marginTop="12dp"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp" />
+
+    <!-- Limites configurados (mín/máx) -->
+    <TextView
+        android:id="@+id/tv_limites"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Limites: 50–120 bpm"
+        android:textColor="#6E7681"
+        android:textSize="12sp"
+        app:layout_constraintTop_toBottomOf="@id/tv_status"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginTop="6dp" />
+
+    <!-- Botão de calibração -->
+    <Button
+        android:id="@+id/btn_calibrar"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="Calibrar (em repouso)"
+        android:backgroundTint="#2EA043"
+        android:textColor="@android:color/white"
+        app:layout_constraintBottom_toTopOf="@id/btn_ver_codigo"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="8dp" />
 
     <!-- Botão para ver o código de sincronização com o cuidador -->
     <Button

@@ -5,6 +5,7 @@ EverNear is a health monitoring mobile application (originally Android/Java) tha
 
 ## Recent Changes
 - 2026-02-06: Initial setup - created web preview of Android app using Node.js/Express
+- 2026-04-30: Added real-time heart rate monitoring via Health Services API (Wear OS) with sensor/simulator fallback, automatic baseline calibration, anomaly detection with debounce + cooldown, and Firebase real-time alerts to caregivers
 
 ## Project Architecture
 - **Original Platform:** Android (Java, Gradle, Firebase Auth/Firestore)

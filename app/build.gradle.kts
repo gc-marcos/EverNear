@@ -43,4 +43,7 @@ dependencies {
     implementation("com.google.firebase:firebase-auth")
     implementation("com.google.firebase:firebase-firestore")
     implementation("androidx.cardview:cardview:1.0.0")
+    implementation("androidx.health:health-services-client:1.1.0-alpha04")
+    implementation("com.google.guava:guava:31.1-android")
+    implementation("androidx.concurrent:concurrent-futures:1.1.0")
 }
