@@ -79,6 +79,25 @@
                 android:layout_marginBottom="@dimen/login_input_margin_bottom"
                 android:visibility="gone" />
 
+            <!-- Telefone (visível apenas no cadastro de PACIENTE) -->
+            <EditText
+                android:id="@+id/et_telefone"
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/login_input_height"
+                android:background="@drawable/bg_input_login"
+                android:drawableStart="@drawable/ic_email_phone"
+                android:drawablePadding="@dimen/login_input_drawable_padding"
+                android:gravity="center_vertical"
+                android:hint="Telefone do paciente (com DDD)"
+                android:inputType="phone"
+                android:paddingStart="@dimen/login_input_padding_h"
+                android:paddingEnd="@dimen/login_input_padding_h"
+                android:textColor="@color/login_text_primary"
+                android:textColorHint="@color/login_text_secondary"
+                android:textSize="@dimen/login_input_text_size"
+                android:layout_marginBottom="@dimen/login_input_margin_bottom"
+                android:visibility="gone" />
+
             <!-- Email ou telefone (campo cápsula) -->
             <EditText
                 android:id="@+id/et_email_phone"

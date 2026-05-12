@@ -32,12 +32,18 @@ public class FirebaseHelper {
      * Salva o usuário no Firestore.
      * Para pacientes, o callback retorna o código de vínculo gerado (String).
      * Para cuidadores, o callback retorna null.
+     * @param telefone número do paciente — pode ser null para cuidadores
      */
-    public static void salvarUsuario(String uid, String nome, String email, String tipo, Callback<String> callback) {
+    public static void salvarUsuario(String uid, String nome, String email,
+                                      String tipo, String telefone,
+                                      Callback<String> callback) {
         Map<String, Object> user = new HashMap<>();
         user.put("nome", nome);
         user.put("email", email);
         user.put("tipo", tipo);
+        if (telefone != null && !telefone.isEmpty()) {
+            user.put("telefone", telefone);
+        }
 
         String codigoGerado;
         if ("paciente".equals(tipo) || "patient".equals(tipo)) {
