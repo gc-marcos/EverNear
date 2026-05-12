@@ -12,25 +12,7 @@ import android.util.Log;
 
 import java.util.Random;
 
-/**
- * Monitor de frequência cardíaca em tempo real para Wear OS 2 (Android 9.1, API 28).
- *
- * Usa android.hardware.SensorManager com Sensor.TYPE_HEART_RATE — solução nativa
- * suportada por todos os smartwatches com sensor cardíaco e disponível desde a API 20.
- *
- * Estratégia em cascata:
- *  1. SensorManager TYPE_HEART_RATE — preferencial em qualquer wearable Android
- *  2. Simulador — para emuladores e dispositivos sem sensor
- *
- * Calibração:
- *  - Coleta automática nas primeiras N leituras → cria baseline
- *  - Limites mínimo/máximo derivados do baseline (±25%) ou valores absolutos
- *  - Botão "Calibrar" recoleta o baseline em repouso
- *
- * Detecção de anomalia:
- *  - 3 leituras consecutivas fora do intervalo → alerta
- *  - Cooldown de 60s entre alertas para evitar spam
- */
+
 public class HeartRateMonitor implements SensorEventListener {
 
     private static final String TAG = "HeartRateMonitor";
@@ -139,7 +121,7 @@ public class HeartRateMonitor implements SensorEventListener {
             return;
         }
         Log.w(TAG, "Sem sensor disponível — usando simulador");
-        iniciarSimulador();
+//        iniciarSimulador();
     }
 
     public void parar() {

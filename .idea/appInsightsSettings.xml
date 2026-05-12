@@ -8,10 +8,10 @@
             <InsightsFilterSettings>
               <option name="connection">
                 <ConnectionSetting>
-                  <option name="appId" value="PLACEHOLDER" />
-                  <option name="mobileSdkAppId" value="" />
-                  <option name="projectId" value="" />
-                  <option name="projectNumber" value="" />
+                  <option name="appId" value="com.marcoscarvalho.evernear" />
+                  <option name="mobileSdkAppId" value="1:100986741095:android:de34c71bfc76e6dab8cfc2" />
+                  <option name="projectId" value="evernear-1da08" />
+                  <option name="projectNumber" value="100986741095" />
                 </ConnectionSetting>
               </option>
               <option name="signal" value="SIGNAL_UNSPECIFIED" />

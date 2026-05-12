@@ -49,31 +49,32 @@
         android:layout_marginTop="4dp" />
 
     <!-- Botão Paciente -->
+
+    <!-- Botão Cuidador -->
     <ImageButton
         android:id="@+id/btn_patient"
         android:layout_width="71dp"
         android:layout_height="86dp"
+        android:layout_marginStart="64dp"
+        android:layout_marginTop="88dp"
         android:background="@null"
         android:contentDescription="@string/button_patient_description"
         android:scaleType="centerCrop"
-        app:srcCompat="@drawable/image_btn_paciente"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/tv_welcome_question_part2"
-        app:layout_constraintVertical_bias="0.0"
-        android:layout_marginStart="16dp"
-        android:layout_marginTop="24dp" />
+        app:srcCompat="@drawable/image_btn_paciente" />
 
-    <!-- Botão Cuidador -->
     <ImageButton
         android:id="@+id/btn_caregiver"
         android:layout_width="71dp"
         android:layout_height="86dp"
+        android:layout_marginTop="4dp"
+        android:layout_marginEnd="64dp"
         android:background="@null"
         android:contentDescription="@string/button_caregiver_description"
         android:scaleType="centerCrop"
-        app:srcCompat="@drawable/image_btn_cuidador"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toTopOf="@id/btn_patient"
-        android:layout_marginEnd="16dp" />
+        app:srcCompat="@drawable/image_btn_cuidador" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

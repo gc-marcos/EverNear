@@ -107,12 +107,13 @@
             android:id="@+id/tv_status_vinculo"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Compartilhe este código com seu cuidador"
-            android:textColor="#9AA4B2"
             android:layout_marginTop="20dp"
             android:layout_marginBottom="32dp"
             android:gravity="center"
-            android:textAlignment="center" />
+            android:text="Compartilhe este código com seu cuidador"
+            android:textAlignment="center"
+            android:textColor="#9AA4B2"
+            android:textSize="16sp" />
 
     </LinearLayout>
 </ScrollView>

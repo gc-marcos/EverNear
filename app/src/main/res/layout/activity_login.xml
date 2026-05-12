@@ -177,14 +177,14 @@
             android:id="@+id/tv_create_account"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/login_footer_margin_top"
             android:padding="@dimen/login_footer_padding"
             android:text="@string/login_first_access"
             android:textColor="@color/login_text_secondary"
-            android:textSize="@dimen/login_footer_text_size"
+            android:textSize="20sp"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/layout_security"
-            android:layout_marginTop="@dimen/login_footer_margin_top" />
+            app:layout_constraintTop_toBottomOf="@id/layout_security" />
     </androidx.constraintlayout.widget.ConstraintLayout>
 </ScrollView>
