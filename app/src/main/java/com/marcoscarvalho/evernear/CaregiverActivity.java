@@ -67,6 +67,11 @@ public class CaregiverActivity extends AppCompatActivity {
             btnCall.setOnClickListener(v -> ligarParaPaciente());
         }
 
+        // Inicia o serviço de alertas em segundo plano para o cuidador
+        // (garante recebimento mesmo quando o app estiver fechado)
+        ContextCompat.startForegroundService(this,
+                new Intent(this, CaregiverAlertService.class));
+
         carregarDadosCuidador();
         ouvirAlertas();
     }

@@ -53,10 +53,12 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
     private HeartRateMonitor monitor;
     private NotificationManager notifManager;
 
-    // Dados do paciente (carregados do Firestore no início)
+    // Dados do paciente — mantidos em tempo real via snapshot listener
     private String uidPaciente;
     private String nomePaciente = "Paciente";
     private String uidCuidador;
+    private com.google.firebase.firestore.ListenerRegistration pacienteDataListener;
+    private boolean monitorIniciado = false;
 
     // Throttle da notificação (evita refresh excessivo)
     private long lastNotifUpdate = 0;
@@ -120,6 +122,7 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
 
     @Override
     public void onDestroy() {
+        if (pacienteDataListener != null) pacienteDataListener.remove();
         if (monitor != null) monitor.parar();
         instance = null;
         super.onDestroy();
@@ -143,18 +146,31 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
 
         uidPaciente = auth.getUid();
 
-        FirebaseFirestore.getInstance().collection("users").document(uidPaciente).get()
-                .addOnSuccessListener(doc -> {
-                    if (doc.exists()) {
+        // Snapshot listener em vez de .get() — mantém uidCuidador sempre atualizado.
+        // Isso resolve o caso em que o vínculo com o cuidador é feito DEPOIS que o
+        // serviço já está rodando (o .get() guardaria null para sempre).
+        pacienteDataListener = FirebaseFirestore.getInstance()
+                .collection("users").document(uidPaciente)
+                .addSnapshotListener((doc, e) -> {
+                    if (e != null) {
+                        Log.w(TAG, "Erro no listener do paciente: " + e.getMessage());
+                        if (!monitorIniciado) {
+                            monitorIniciado = true;
+                            iniciarMonitor(); // inicia mesmo sem dados
+                        }
+                        return;
+                    }
+                    if (doc != null && doc.exists()) {
                         String nome = doc.getString("nome");
                         if (nome != null) nomePaciente = nome;
                         uidCuidador = doc.getString("cuidadorVinculado");
+                        Log.d(TAG, "Dados do paciente atualizados — cuidador: " + uidCuidador);
                     }
-                    iniciarMonitor();
-                })
-                .addOnFailureListener(e -> {
-                    Log.w(TAG, "Falha ao carregar dados — inicia monitor mesmo assim");
-                    iniciarMonitor();
+                    // Inicia o monitor apenas na primeira vez
+                    if (!monitorIniciado) {
+                        monitorIniciado = true;
+                        iniciarMonitor();
+                    }
                 });
     }
 

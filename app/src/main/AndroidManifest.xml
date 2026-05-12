@@ -15,6 +15,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <!-- Necessário para targetSdk 34+ com serviço do tipo "health" -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
+    <!-- Necessário para targetSdk 34+ com serviço do tipo "dataSync" (cuidador) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <!-- Reiniciar o monitor após reboot do dispositivo -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
@@ -74,7 +76,7 @@
             android:theme="@style/Theme.AppCompat.DayNight.NoActionBar" />
 
         <!--
-            Serviço de monitoramento em segundo plano.
+            Serviço de monitoramento em segundo plano (PACIENTE — smartwatch).
             foregroundServiceType="health" identifica o propósito para o Android (API 34+).
             START_STICKY garante reinício automático se o sistema encerrar o processo.
         -->
@@ -82,6 +84,16 @@
             android:name=".HeartRateService"
             android:exported="false"
             android:foregroundServiceType="health" />
+
+        <!--
+            Serviço de recebimento de alertas em segundo plano (CUIDADOR — celular).
+            Mantém listener Firestore ativo e exibe notificações de alta prioridade
+            mesmo quando o app está fechado.
+        -->
+        <service
+            android:name=".CaregiverAlertService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
 
         <!--
             Receptor de boot: reinicia o serviço quando o relógio/celular é ligado.
