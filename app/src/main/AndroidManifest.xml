@@ -4,12 +4,23 @@
     <uses-feature android:name="android.hardware.type.watch" android:required="false" />
     <uses-feature android:name="android.hardware.sensor.heartrate" android:required="false" />
 
-    <!-- Permissões necessárias para monitoramento de frequência cardíaca via Health Services -->
+    <!-- Sensores e conectividade -->
     <uses-permission android:name="android.permission.BODY_SENSORS" />
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- Serviço em primeiro plano (obrigatório para rodar em segundo plano no Android 9+) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!-- Necessário para targetSdk 34+ com serviço do tipo "health" -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
+
+    <!-- Reiniciar o monitor após reboot do dispositivo -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!-- Notificações (Android 13+ / API 33+) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:allowBackup="true"
@@ -58,6 +69,29 @@
             android:name=".DashboardCuidadorActivity"
             android:exported="false"
             android:theme="@style/Theme.AppCompat.DayNight.NoActionBar" />
+
+        <!--
+            Serviço de monitoramento em segundo plano.
+            foregroundServiceType="health" identifica o propósito para o Android (API 34+).
+            START_STICKY garante reinício automático se o sistema encerrar o processo.
+        -->
+        <service
+            android:name=".HeartRateService"
+            android:exported="false"
+            android:foregroundServiceType="health" />
+
+        <!--
+            Receptor de boot: reinicia o serviço quando o relógio/celular é ligado.
+            QUICKBOOT_POWERON cobre alguns fabricantes (ex: HTC/Huawei).
+        -->
+        <receiver
+            android:name=".BootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
+        </receiver>
 
     </application>
 

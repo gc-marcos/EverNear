@@ -2,6 +2,7 @@ package com.marcoscarvalho.evernear;
 
 import android.Manifest;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.os.Build;
@@ -19,22 +20,29 @@ import androidx.core.content.ContextCompat;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.firestore.FirebaseFirestore;
 
+/**
+ * Tela principal do paciente no smartwatch.
+ *
+ * O monitoramento real roda no HeartRateService (em segundo plano).
+ * Esta Activity se registra como listener do serviço quando visível para
+ * exibir o BPM em tempo real sem custo adicional de bateria.
+ *
+ * Quando o app é fechado, o serviço continua rodando sozinho.
+ */
 public class PatientActivity extends AppCompatActivity implements HeartRateMonitor.Listener {
 
     private static final String TAG = "PatientActivity";
-    private static final int REQ_PERMISSIONS = 1001;
+    private static final int REQ_BODY_SENSORS = 1001;
+    private static final int REQ_POST_NOTIFICATIONS = 1002;
 
     private TextView tvBpmValue, tvStatus, tvLimites;
     private Button btnEmergency, btnVerCodigo, btnCalibrar;
 
-    private HeartRateMonitor monitor;
     private String uidPaciente;
     private String nomePaciente = "Paciente";
     private String uidCuidadorVinculado;
 
-    // Throttle: envia BPM ao Firestore no máximo a cada 5s
-    private long lastFirestoreUpdate = 0;
-    private static final long FIRESTORE_UPDATE_INTERVAL_MS = 5_000L;
+    // ==================== Ciclo de vida ====================
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -55,17 +63,35 @@ public class PatientActivity extends AppCompatActivity implements HeartRateMonit
 
         btnEmergency.setOnClickListener(v -> dispararEmergenciaManual());
 
+        // Calibrar: envia Intent para o serviço recalibrar
         btnCalibrar.setOnClickListener(v -> {
-            if (monitor != null) {
-                monitor.recalibrar();
-                Toast.makeText(this, "Calibração iniciada — fique em repouso",
-                        Toast.LENGTH_LONG).show();
-            }
+            Intent intent = new Intent(this, HeartRateService.class);
+            intent.setAction(HeartRateService.ACTION_CALIBRAR);
+            ContextCompat.startForegroundService(this, intent);
+            Toast.makeText(this, "Calibração iniciada — fique em repouso",
+                    Toast.LENGTH_LONG).show();
         });
 
         carregarDadosPaciente();
+        atualizarLimitesUI();
         verificarPermissoes();
     }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // Registra esta Activity para receber atualizações em tempo real do serviço
+        HeartRateService.setActivityListener(this);
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        // Remove o listener — o serviço continua mas não tenta atualizar a UI
+        HeartRateService.setActivityListener(null);
+    }
+
+    // ==================== Dados do paciente ====================
 
     private void carregarDadosPaciente() {
         if (uidPaciente == null) return;
@@ -82,144 +108,121 @@ public class PatientActivity extends AppCompatActivity implements HeartRateMonit
     // ==================== Permissões ====================
 
     private void verificarPermissoes() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            boolean bodySensors = ContextCompat.checkSelfPermission(this,
-                    Manifest.permission.BODY_SENSORS) == PackageManager.PERMISSION_GRANTED;
+        // Solicita BODY_SENSORS (obrigatório para o sensor cardíaco)
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.BODY_SENSORS)
+                != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this,
+                    new String[]{Manifest.permission.BODY_SENSORS}, REQ_BODY_SENSORS);
+            return;
+        }
 
-            if (!bodySensors) {
+        // Solicita POST_NOTIFICATIONS em Android 13+ para que o serviço exiba notificações
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                    != PackageManager.PERMISSION_GRANTED) {
                 ActivityCompat.requestPermissions(this,
-                        new String[]{Manifest.permission.BODY_SENSORS},
-                        REQ_PERMISSIONS);
+                        new String[]{Manifest.permission.POST_NOTIFICATIONS},
+                        REQ_POST_NOTIFICATIONS);
                 return;
             }
         }
-        iniciarMonitor();
+
+        iniciarServico();
     }
 
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
                                             @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == REQ_PERMISSIONS) {
-            boolean granted = grantResults.length > 0
-                    && grantResults[0] == PackageManager.PERMISSION_GRANTED;
-            if (granted) {
-                iniciarMonitor();
-            } else {
-                tvStatus.setText("Permissão BODY_SENSORS negada — usando simulador");
-                iniciarMonitor(); // ainda inicia (cai no simulador)
+
+        if (requestCode == REQ_BODY_SENSORS) {
+            if (grantResults.length > 0 && grantResults[0] != PackageManager.PERMISSION_GRANTED) {
+                tvStatus.setText("Permissão de sensor negada — usando simulador");
             }
+            // Com ou sem permissão, inicia o serviço (cairá no simulador se negado)
+            verificarPermissoes(); // continua para verificar POST_NOTIFICATIONS
+        } else if (requestCode == REQ_POST_NOTIFICATIONS) {
+            iniciarServico(); // inicia independente do resultado (notificação é opcional)
         }
     }
 
-    // ==================== Ciclo de vida ====================
+    // ==================== Serviço ====================
 
-    private void iniciarMonitor() {
-        if (monitor == null) {
-            monitor = new HeartRateMonitor(this, this);
-        }
-        monitor.iniciar();
+    private void iniciarServico() {
+        Intent intent = new Intent(this, HeartRateService.class);
+        ContextCompat.startForegroundService(this, intent);
         atualizarLimitesUI();
     }
 
-    @Override
-    protected void onStop() {
-        super.onStop();
-        // Para economia de bateria: desliga o monitor quando a tela sai
-        if (monitor != null) monitor.parar();
-    }
-
-    @Override
-    protected void onStart() {
-        super.onStart();
-        if (monitor != null) monitor.iniciar();
-    }
-
-    // ==================== Callbacks do HeartRateMonitor ====================
+    // ==================== Callbacks do HeartRateMonitor (via Serviço) ====================
 
     @Override
     public void onHeartRate(int bpm) {
         tvBpmValue.setText(String.valueOf(bpm));
         atualizarStatusVisual(bpm);
-
-        // Atualiza Firestore com throttle (a cada 5s) para o cuidador acompanhar
-        long agora = System.currentTimeMillis();
-        if (uidPaciente != null && agora - lastFirestoreUpdate >= FIRESTORE_UPDATE_INTERVAL_MS) {
-            lastFirestoreUpdate = agora;
-            try {
-                FirebaseHelper.atualizarBpm(uidPaciente, bpm);
-            } catch (Exception e) {
-                Log.w(TAG, "Falha ao atualizar BPM no Firestore: " + e.getMessage());
-            }
-        }
     }
 
     @Override
     public void onStatusChange(String status) {
         tvStatus.setText(status);
+        tvStatus.setTextColor(Color.parseColor("#9AA4B2"));
     }
 
     @Override
     public void onAnomaly(int bpm, HeartRateMonitor.AnomalyType tipo) {
-        String mensagem = (tipo == HeartRateMonitor.AnomalyType.HIGH)
-                ? "Frequência ALTA detectada: " + bpm + " bpm"
-                : "Frequência BAIXA detectada: " + bpm + " bpm";
-        Log.w(TAG, "ANOMALIA → " + mensagem);
+        String mensagem = tipo == HeartRateMonitor.AnomalyType.HIGH
+                ? "Frequência ALTA: " + bpm + " bpm"
+                : "Frequência BAIXA: " + bpm + " bpm";
         Toast.makeText(this, mensagem, Toast.LENGTH_LONG).show();
-
-        // Tenta enviar alerta ao Firebase (não bloqueia se faltar cuidador)
-        if (uidPaciente == null) return;
-        if (uidCuidadorVinculado == null || uidCuidadorVinculado.isEmpty()) {
-            Log.w(TAG, "Sem cuidador vinculado — alerta não enviado");
-            return;
-        }
-
-        FirebaseHelper.enviarAlerta(uidPaciente, nomePaciente, uidCuidadorVinculado,
-                bpm, tipo.name(), new FirebaseHelper.Callback<String>() {
-                    @Override
-                    public void onResult(String alertaId) {
-                        Log.d(TAG, "Alerta enviado: " + alertaId);
-                    }
-                    @Override
-                    public void onError(Exception e) {
-                        Log.e(TAG, "Falha ao enviar alerta", e);
-                    }
-                });
+        // O envio ao Firebase já é feito pelo HeartRateService
     }
 
     @Override
     public void onCalibrationProgress(int collected, int total) {
         tvStatus.setText("Calibrando... " + collected + "/" + total);
+        tvStatus.setTextColor(Color.parseColor("#FFC107"));
     }
 
     @Override
     public void onCalibrationComplete(int baseline, int min, int max) {
-        tvStatus.setText("Calibração concluída — baseline " + baseline + " bpm");
+        tvStatus.setText("Calibrado — baseline " + baseline + " bpm");
+        tvStatus.setTextColor(Color.parseColor("#4CAF50"));
         atualizarLimitesUI();
-        if (uidPaciente != null) {
-            FirebaseHelper.salvarBaseline(uidPaciente, baseline, min, max);
-        }
         Toast.makeText(this,
-                "Calibrado! Baseline: " + baseline + " bpm (alerta abaixo de " + min + " ou acima de " + max + ")",
+                "Calibração concluída!\nBaseline: " + baseline
+                        + " bpm | Intervalo: " + min + "–" + max,
                 Toast.LENGTH_LONG).show();
     }
 
     // ==================== UI ====================
 
     private void atualizarLimitesUI() {
-        if (monitor != null) {
-            tvLimites.setText("Limites: " + monitor.getBpmMin() + "–" + monitor.getBpmMax() + " bpm");
+        HeartRateService svc = HeartRateService.getInstance();
+        if (svc != null && svc.getMonitor() != null) {
+            tvLimites.setText("Limites: "
+                    + svc.getMonitor().getBpmMin() + "–"
+                    + svc.getMonitor().getBpmMax() + " bpm");
+        } else {
+            // Lê dos SharedPreferences antes do serviço subir
+            SharedPreferences prefs = getSharedPreferences("heart_rate_prefs", MODE_PRIVATE);
+            int min = prefs.getInt("bpm_min", 50);
+            int max = prefs.getInt("bpm_max", 120);
+            tvLimites.setText("Limites: " + min + "–" + max + " bpm");
         }
     }
 
     private void atualizarStatusVisual(int bpm) {
-        if (monitor == null) return;
-        if (monitor.isCalibrating()) return; // status sobrescrito por progresso
+        HeartRateService svc = HeartRateService.getInstance();
+        if (svc == null || svc.getMonitor() == null) return;
+        if (svc.getMonitor().isCalibrating()) return;
 
-        if (bpm < monitor.getBpmMin()) {
+        int min = svc.getMonitor().getBpmMin();
+        int max = svc.getMonitor().getBpmMax();
+
+        if (bpm < min) {
             tvStatus.setText("ATENÇÃO — abaixo do normal");
             tvStatus.setTextColor(Color.parseColor("#FFC107"));
-        } else if (bpm > monitor.getBpmMax()) {
+        } else if (bpm > max) {
             tvStatus.setText("ALERTA — acima do normal");
             tvStatus.setTextColor(Color.parseColor("#FF5252"));
         } else {
@@ -228,21 +231,26 @@ public class PatientActivity extends AppCompatActivity implements HeartRateMonit
         }
     }
 
+    // ==================== Emergência manual ====================
+
     private void dispararEmergenciaManual() {
-        if (uidPaciente == null || uidCuidadorVinculado == null) {
-            Toast.makeText(this, "Vincule-se a um cuidador primeiro", Toast.LENGTH_SHORT).show();
+        if (uidPaciente == null || uidCuidadorVinculado == null
+                || uidCuidadorVinculado.isEmpty()) {
+            Toast.makeText(this, "Vincule-se a um cuidador primeiro",
+                    Toast.LENGTH_SHORT).show();
             return;
         }
         int bpmAtual = 0;
         try {
             bpmAtual = Integer.parseInt(tvBpmValue.getText().toString());
         } catch (NumberFormatException ignored) {}
+
         FirebaseHelper.enviarAlerta(uidPaciente, nomePaciente, uidCuidadorVinculado,
                 bpmAtual, "MANUAL", new FirebaseHelper.Callback<String>() {
                     @Override
                     public void onResult(String alertaId) {
                         Toast.makeText(PatientActivity.this,
-                                "Alerta de emergência enviado", Toast.LENGTH_LONG).show();
+                                "Alerta de emergência enviado!", Toast.LENGTH_LONG).show();
                     }
                     @Override
                     public void onError(Exception e) {
