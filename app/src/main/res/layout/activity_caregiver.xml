@@ -9,6 +9,7 @@
     android:padding="20dp"
     tools:context=".CaregiverActivity">
 
+    <!-- Botão voltar (esquerda) -->
     <ImageView
         android:id="@+id/iv_back"
         android:layout_width="28dp"
@@ -19,6 +20,7 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
+    <!-- Título central -->
     <TextView
         android:id="@+id/tv_alert_title"
         android:layout_width="wrap_content"
@@ -27,10 +29,26 @@
         android:textColor="@color/caregiver_alert_red"
         android:textSize="20sp"
         android:textStyle="bold"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toStartOf="@id/btn_add_paciente"
+        app:layout_constraintStart_toEndOf="@id/iv_back"
         app:layout_constraintTop_toTopOf="parent" />
 
+    <!-- Botão adicionar novo paciente (direita) -->
+    <Button
+        android:id="@+id/btn_add_paciente"
+        android:layout_width="wrap_content"
+        android:layout_height="32dp"
+        android:background="@drawable/bg_caregiver_button_primary"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:text="+ Paciente"
+        android:textColor="@color/caregiver_text_primary"
+        android:textSize="12sp"
+        android:textStyle="bold"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <!-- Card do paciente ativo -->
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/card_alert"
         android:layout_width="0dp"
@@ -167,98 +185,45 @@
         </LinearLayout>
     </androidx.constraintlayout.widget.ConstraintLayout>
 
+    <!-- Seção: lista de pacientes vinculados -->
     <LinearLayout
-        android:id="@+id/caregivers_list"
+        android:id="@+id/section_pacientes"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:gravity="center"
-        android:orientation="horizontal"
+        android:orientation="vertical"
         app:layout_constraintTop_toBottomOf="@id/card_alert"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginTop="24dp">
+        app:layout_constraintBottom_toTopOf="@id/bottom_map"
+        android:layout_marginTop="20dp">
 
-        <LinearLayout
+        <TextView
+            android:id="@+id/tv_label_pacientes"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:gravity="center"
-            android:orientation="vertical">
+            android:text="Pacientes vinculados"
+            android:textColor="@color/caregiver_text_secondary"
+            android:textSize="12sp"
+            android:textAllCaps="true"
+            android:letterSpacing="0.08"
+            android:layout_marginBottom="12dp" />
 
-            <TextView
-                android:layout_width="44dp"
-                android:layout_height="44dp"
-                android:background="@drawable/bg_caregiver_avatar_inner"
-                android:gravity="center"
-                android:text="@string/caregiver_contact_maria_initials"
-                android:textColor="@color/caregiver_text_primary"
-                android:textStyle="bold" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:text="@string/caregiver_contact_maria"
-                android:textColor="@color/caregiver_text_secondary"
-                android:textSize="12sp" />
-        </LinearLayout>
-
-        <Space
-            android:layout_width="16dp"
-            android:layout_height="wrap_content" />
-
-        <LinearLayout
-            android:layout_width="wrap_content"
+        <!-- Lista horizontal rolável de pacientes -->
+        <HorizontalScrollView
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:gravity="center"
-            android:orientation="vertical">
+            android:scrollbars="none">
 
-            <TextView
-                android:layout_width="44dp"
-                android:layout_height="44dp"
-                android:background="@drawable/bg_caregiver_avatar_inner"
-                android:gravity="center"
-                android:text="@string/caregiver_contact_ana_initials"
-                android:textColor="@color/caregiver_text_primary"
-                android:textStyle="bold" />
-
-            <TextView
+            <LinearLayout
+                android:id="@+id/ll_pacientes_secundarios"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:text="@string/caregiver_contact_ana"
-                android:textColor="@color/caregiver_text_secondary"
-                android:textSize="12sp" />
-        </LinearLayout>
-
-        <Space
-            android:layout_width="16dp"
-            android:layout_height="wrap_content" />
-
-        <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:gravity="center"
-            android:orientation="vertical">
-
-            <TextView
-                android:layout_width="44dp"
-                android:layout_height="44dp"
-                android:background="@drawable/bg_caregiver_avatar_inner"
-                android:gravity="center"
-                android:text="@string/caregiver_contact_pedro_initials"
-                android:textColor="@color/caregiver_text_primary"
-                android:textStyle="bold" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:text="@string/caregiver_contact_pedro"
-                android:textColor="@color/caregiver_text_secondary"
-                android:textSize="12sp" />
-        </LinearLayout>
+                android:orientation="horizontal"
+                android:gravity="center_vertical" />
+        </HorizontalScrollView>
     </LinearLayout>
 
+    <!-- Barra inferior (mapa) -->
     <LinearLayout
         android:id="@+id/bottom_map"
         android:layout_width="0dp"

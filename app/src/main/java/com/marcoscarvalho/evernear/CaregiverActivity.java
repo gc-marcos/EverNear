@@ -6,7 +6,10 @@ import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
+import android.view.Gravity;
 import android.view.View;
+import android.widget.Button;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -22,6 +25,7 @@ import com.google.firebase.firestore.DocumentChange;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.ListenerRegistration;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -34,6 +38,7 @@ public class CaregiverActivity extends AppCompatActivity {
     private TextView tvAvatarInitials;
     private TextView tvBpmValue;
     private View btnCall;
+    private LinearLayout llPacientesSecundarios;
 
     private FirebaseFirestore db;
     private String uidCuidador;
@@ -41,19 +46,28 @@ public class CaregiverActivity extends AppCompatActivity {
     private ListenerRegistration pacienteListener;
     private ListenerRegistration alertasListener;
 
-    private String telefonePaciente;   // carregado do Firestore do paciente vinculado
+    private String telefonePaciente;
+    private String uidPacienteAtivo;          // paciente exibido no card_alert
+
+    // Cache: uid → {nome, apelido} para construir os chips sem re-consultar
+    private final List<String> todosUids = new ArrayList<>();
+    private final Map<String, String> nomesPorUid = new HashMap<>(); // uid → texto exibir
+
     private long appStartTimestamp;
     private final Map<String, Boolean> alertasJaExibidos = new HashMap<>();
+
+    // ==================== Ciclo de vida ====================
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_caregiver);
 
-        tvPatientName = findViewById(R.id.tv_patient_name);
-        tvAvatarInitials = findViewById(R.id.tv_avatar_initials);
-        tvBpmValue = findViewById(R.id.tv_bpm_value);
-        btnCall = findViewById(R.id.btn_call);
+        tvPatientName        = findViewById(R.id.tv_patient_name);
+        tvAvatarInitials     = findViewById(R.id.tv_avatar_initials);
+        tvBpmValue           = findViewById(R.id.tv_bpm_value);
+        btnCall              = findViewById(R.id.btn_call);
+        llPacientesSecundarios = findViewById(R.id.ll_pacientes_secundarios);
 
         db = FirebaseFirestore.getInstance();
         uidCuidador = FirebaseAuth.getInstance().getUid();
@@ -62,13 +76,15 @@ public class CaregiverActivity extends AppCompatActivity {
         View ivBack = findViewById(R.id.iv_back);
         if (ivBack != null) ivBack.setOnClickListener(v -> finish());
 
-        // Botão de ligar para o paciente
-        if (btnCall != null) {
-            btnCall.setOnClickListener(v -> ligarParaPaciente());
+        Button btnAddPaciente = findViewById(R.id.btn_add_paciente);
+        if (btnAddPaciente != null) {
+            btnAddPaciente.setOnClickListener(v ->
+                    startActivity(new Intent(this, DashboardCuidadorActivity.class)));
         }
 
-        // Inicia o serviço de alertas em segundo plano para o cuidador
-        // (garante recebimento mesmo quando o app estiver fechado)
+        if (btnCall != null) btnCall.setOnClickListener(v -> ligarParaPaciente());
+
+        // Inicia serviço de alertas em segundo plano para o cuidador
         ContextCompat.startForegroundService(this,
                 new Intent(this, CaregiverAlertService.class));
 
@@ -76,7 +92,7 @@ public class CaregiverActivity extends AppCompatActivity {
         ouvirAlertas();
     }
 
-    // ==================== Dados do cuidador e paciente ====================
+    // ==================== Carregamento dos pacientes vinculados ====================
 
     private void carregarDadosCuidador() {
         if (uidCuidador == null) return;
@@ -86,24 +102,147 @@ public class CaregiverActivity extends AppCompatActivity {
                     if (e != null || snapshot == null || !snapshot.exists()) return;
 
                     @SuppressWarnings("unchecked")
-                    List<String> pacientesUids = (List<String>) snapshot.get("pacientesVinculados");
+                    List<String> uids = (List<String>) snapshot.get("pacientesVinculados");
 
-                    if (pacientesUids == null || pacientesUids.isEmpty()) {
+                    if (uids == null || uids.isEmpty()) {
+                        // Nenhum paciente — mostra estado vazio no card
                         tvPatientName.setText("Nenhum paciente vinculado");
                         tvAvatarInitials.setText("?");
                         tvBpmValue.setText("--");
                         telefonePaciente = null;
-                        startActivity(new Intent(CaregiverActivity.this, DashboardCuidadorActivity.class));
-                    } else {
-                        ouvirPaciente(pacientesUids.get(0));
+                        if (btnCall != null) btnCall.setAlpha(0.4f);
+                        llPacientesSecundarios.removeAllViews();
+                        todosUids.clear();
+                        nomesPorUid.clear();
+                        uidPacienteAtivo = null;
+                        if (pacienteListener != null) pacienteListener.remove();
+                        return;
                     }
+
+                    todosUids.clear();
+                    todosUids.addAll(uids);
+
+                    // Se ainda não há paciente ativo (primeira carga), usa o primeiro
+                    if (uidPacienteAtivo == null || !uids.contains(uidPacienteAtivo)) {
+                        uidPacienteAtivo = uids.get(0);
+                        ouvirPaciente(uidPacienteAtivo);
+                    }
+
+                    // Carrega nomes de todos os pacientes para montar os chips
+                    carregarNomesEConstruirChips(uids);
                 });
     }
 
     /**
-     * Listener em tempo real do primeiro paciente vinculado.
-     * Atualiza nome, iniciais, BPM e telefone continuamente.
+     * Busca o nome/apelido de cada paciente e depois reconstrói a lista de chips.
+     * Usa cache (nomesPorUid) para não rebuscar o que já foi carregado.
      */
+    private void carregarNomesEConstruirChips(List<String> uids) {
+        // Quantos ainda faltam ser resolvidos
+        final int[] pendentes = {uids.size()};
+
+        for (String uid : uids) {
+            if (nomesPorUid.containsKey(uid)) {
+                pendentes[0]--;
+                if (pendentes[0] == 0) construirChips(uids);
+                continue;
+            }
+            db.collection("users").document(uid).get()
+                    .addOnSuccessListener(doc -> {
+                        if (doc.exists()) {
+                            String nome    = doc.getString("nome");
+                            String apelido = doc.getString("apelido");
+                            String exibir  = (apelido != null && !apelido.isEmpty())
+                                    ? apelido : (nome != null ? nome : "Paciente");
+                            nomesPorUid.put(uid, exibir);
+                        }
+                        pendentes[0]--;
+                        if (pendentes[0] == 0) construirChips(uids);
+                    })
+                    .addOnFailureListener(ex -> {
+                        nomesPorUid.put(uid, "Paciente");
+                        pendentes[0]--;
+                        if (pendentes[0] == 0) construirChips(uids);
+                    });
+        }
+    }
+
+    /**
+     * Reconstrói todos os chips de paciente na lista horizontal.
+     * O paciente ativo aparece com avatar destacado; os demais com cor normal.
+     */
+    private void construirChips(List<String> uids) {
+        llPacientesSecundarios.removeAllViews();
+
+        for (String uid : uids) {
+            String nome = nomesPorUid.getOrDefault(uid, "Paciente");
+            boolean ativo = uid.equals(uidPacienteAtivo);
+
+            // Container vertical (avatar + nome)
+            LinearLayout item = new LinearLayout(this);
+            item.setOrientation(LinearLayout.VERTICAL);
+            item.setGravity(Gravity.CENTER_HORIZONTAL);
+            LinearLayout.LayoutParams itemParams = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT);
+            itemParams.setMargins(0, 0, 20, 0);
+            item.setLayoutParams(itemParams);
+            item.setTag(uid);
+
+            // Avatar circular com iniciais
+            TextView avatar = new TextView(this);
+            LinearLayout.LayoutParams avParams = new LinearLayout.LayoutParams(52, 52);
+            avatar.setLayoutParams(avParams);
+            avatar.setGravity(Gravity.CENTER);
+            avatar.setText(gerarIniciais(nome));
+            avatar.setTextColor(Color.WHITE);
+            avatar.setTextSize(14f);
+            avatar.setTypeface(null, android.graphics.Typeface.BOLD);
+            // Ativo: vermelho médico; inativo: cinza escuro
+            avatar.setBackgroundResource(ativo
+                    ? R.drawable.bg_caregiver_avatar_inner   // mesmo drawable mas tintado
+                    : R.drawable.bg_caregiver_avatar_inner);
+            // Diferencia visualmente: ativo usa cor de alerta, inativo usa cinza
+            avatar.setBackgroundColor(ativo
+                    ? Color.parseColor("#C0392B")
+                    : Color.parseColor("#2C3E50"));
+            // Arredonda o fundo programaticamente
+            android.graphics.drawable.GradientDrawable shape =
+                    new android.graphics.drawable.GradientDrawable();
+            shape.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+            shape.setColor(ativo ? Color.parseColor("#C0392B") : Color.parseColor("#2C3E50"));
+            avatar.setBackground(shape);
+
+            // Nome abaixo do avatar
+            TextView tvNome = new TextView(this);
+            tvNome.setLayoutParams(new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT));
+            tvNome.setText(nome.length() > 10 ? nome.substring(0, 9) + "…" : nome);
+            tvNome.setTextColor(ativo ? Color.WHITE : Color.parseColor("#8899AA"));
+            tvNome.setTextSize(11f);
+            tvNome.setGravity(Gravity.CENTER);
+            tvNome.setPadding(0, 6, 0, 0);
+
+            item.addView(avatar);
+            item.addView(tvNome);
+
+            // Clique: troca o paciente ativo
+            final String uidChip = uid;
+            item.setOnClickListener(v -> {
+                if (!uidChip.equals(uidPacienteAtivo)) {
+                    uidPacienteAtivo = uidChip;
+                    ouvirPaciente(uidChip);
+                    construirChips(todosUids); // atualiza destaque
+                }
+            });
+
+            llPacientesSecundarios.addView(item);
+        }
+    }
+
+    // ==================== Listener do paciente ativo ====================
+
     private void ouvirPaciente(String uidPaciente) {
         if (pacienteListener != null) pacienteListener.remove();
 
@@ -111,24 +250,23 @@ public class CaregiverActivity extends AppCompatActivity {
                 .addSnapshotListener((doc, e) -> {
                     if (e != null || doc == null || !doc.exists()) return;
 
-                    // Nome / apelido
-                    String nome = doc.getString("nome");
+                    String nome    = doc.getString("nome");
                     String apelido = doc.getString("apelido");
-                    String exibir = (apelido != null && !apelido.isEmpty()) ? apelido : nome;
+                    String exibir  = (apelido != null && !apelido.isEmpty()) ? apelido : nome;
+
                     if (exibir != null) {
                         tvPatientName.setText(exibir);
                         tvAvatarInitials.setText(gerarIniciais(exibir));
+                        // Atualiza o cache de nome para refletir mudanças
+                        nomesPorUid.put(uidPaciente, exibir);
                     }
 
-                    // Telefone — salvo no cadastro do paciente
                     telefonePaciente = doc.getString("telefone");
                     if (btnCall != null) {
-                        // Destaca o botão se houver telefone cadastrado
                         btnCall.setAlpha(telefonePaciente != null && !telefonePaciente.isEmpty()
                                 ? 1f : 0.4f);
                     }
 
-                    // BPM em tempo real
                     Long ultimoBpm = doc.getLong("ultimoBpm");
                     if (ultimoBpm != null) {
                         tvBpmValue.setText(ultimoBpm + " bpm");
@@ -140,6 +278,9 @@ public class CaregiverActivity extends AppCompatActivity {
                                 (ultimoBpm < min || ultimoBpm > max)
                                         ? Color.parseColor("#FF5252")
                                         : Color.parseColor("#4CAF50"));
+                    } else {
+                        tvBpmValue.setText("--");
+                        tvBpmValue.setTextColor(Color.parseColor("#8899AA"));
                     }
                 });
     }
@@ -153,24 +294,19 @@ public class CaregiverActivity extends AppCompatActivity {
                     Toast.LENGTH_LONG).show();
             return;
         }
-
-        // Solicita CALL_PHONE em runtime (obrigatório API 23+)
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CALL_PHONE)
                 != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this,
                     new String[]{Manifest.permission.CALL_PHONE}, REQ_CALL_PHONE);
             return;
         }
-
         discaParaTelefone(telefonePaciente);
     }
 
     private void discaParaTelefone(String telefone) {
-        // Remove caracteres não numéricos e monta a URI tel:
         String numero = telefone.replaceAll("[^0-9+]", "");
-        Intent callIntent = new Intent(Intent.ACTION_CALL, Uri.parse("tel:" + numero));
         try {
-            startActivity(callIntent);
+            startActivity(new Intent(Intent.ACTION_CALL, Uri.parse("tel:" + numero)));
         } catch (Exception ex) {
             Toast.makeText(this, "Não foi possível iniciar a ligação", Toast.LENGTH_SHORT).show();
         }
@@ -185,7 +321,7 @@ public class CaregiverActivity extends AppCompatActivity {
                 discaParaTelefone(telefonePaciente);
             } else {
                 Toast.makeText(this,
-                        "Permissão de chamada negada — ligue manualmente para " + telefonePaciente,
+                        "Permissão negada — ligue manualmente para " + telefonePaciente,
                         Toast.LENGTH_LONG).show();
             }
         }
@@ -224,15 +360,13 @@ public class CaregiverActivity extends AppCompatActivity {
 
     private void exibirAlerta(String alertaId, String paciente, int bpm, String tipo) {
         String titulo;
-        if ("MANUAL".equals(tipo)) titulo = "🚨 EMERGÊNCIA acionada";
-        else if ("HIGH".equals(tipo)) titulo = "❤️ Frequência ALTA";
-        else titulo = "💙 Frequência BAIXA";
+        if ("MANUAL".equals(tipo))      titulo = "🚨 EMERGÊNCIA acionada";
+        else if ("HIGH".equals(tipo))   titulo = "❤️ Frequência ALTA";
+        else                            titulo = "💙 Frequência BAIXA";
 
         String msg = (paciente != null ? paciente : "Paciente")
-                + "\n\nBPM: " + bpm
-                + "\nTipo: " + tipo;
+                + "\n\nBPM: " + bpm + "\nTipo: " + tipo;
 
-        // Mostra botão de ligar no diálogo se houver telefone
         AlertDialog.Builder builder = new AlertDialog.Builder(this)
                 .setTitle(titulo)
                 .setMessage(msg)
