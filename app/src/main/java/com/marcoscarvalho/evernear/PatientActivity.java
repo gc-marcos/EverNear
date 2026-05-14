@@ -7,7 +7,6 @@ import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.os.Build;
 import android.os.Bundle;
-import android.util.Log;
 import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -18,29 +17,25 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
 import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.firestore.FirebaseFirestore;
 
 /**
  * Tela principal do paciente no smartwatch.
  *
- * O monitoramento real roda no HeartRateService (em segundo plano).
- * Esta Activity se registra como listener do serviço quando visível para
- * exibir o BPM em tempo real sem custo adicional de bateria.
- *
- * Quando o app é fechado, o serviço continua rodando sozinho.
+ * O monitoramento e o envio de alertas ao Firestore são feitos pelo HeartRateService
+ * (processo em segundo plano). Esta Activity apenas:
+ *  - Exibe o BPM em tempo real (via listener estático do serviço)
+ *  - Aciona calibração / emergência manual via serviço
  */
 public class PatientActivity extends AppCompatActivity implements HeartRateMonitor.Listener {
 
     private static final String TAG = "PatientActivity";
-    private static final int REQ_BODY_SENSORS = 1001;
+    private static final int REQ_BODY_SENSORS    = 1001;
     private static final int REQ_POST_NOTIFICATIONS = 1002;
 
     private TextView tvBpmValue, tvStatus, tvLimites;
     private Button btnEmergency, btnVerCodigo, btnCalibrar;
 
     private String uidPaciente;
-    private String nomePaciente = "Paciente";
-    private String uidCuidadorVinculado;
 
     // ==================== Ciclo de vida ====================
 
@@ -50,20 +45,21 @@ public class PatientActivity extends AppCompatActivity implements HeartRateMonit
         setContentView(R.layout.activity_patient);
 
         tvBpmValue = findViewById(R.id.tv_bpm_value);
-        tvStatus = findViewById(R.id.tv_status);
-        tvLimites = findViewById(R.id.tv_limites);
+        tvStatus   = findViewById(R.id.tv_status);
+        tvLimites  = findViewById(R.id.tv_limites);
         btnEmergency = findViewById(R.id.btn_emergency);
         btnVerCodigo = findViewById(R.id.btn_ver_codigo);
-        btnCalibrar = findViewById(R.id.btn_calibrar);
+        btnCalibrar  = findViewById(R.id.btn_calibrar);
 
         uidPaciente = FirebaseAuth.getInstance().getUid();
 
         btnVerCodigo.setOnClickListener(v ->
                 startActivity(new Intent(this, DashboardPacienteActivity.class)));
 
+        // Emergência: delega ao serviço (que conhece todos os cuidadores vinculados)
         btnEmergency.setOnClickListener(v -> dispararEmergenciaManual());
 
-        // Calibrar: envia Intent para o serviço recalibrar
+        // Calibrar: envia Intent ao serviço
         btnCalibrar.setOnClickListener(v -> {
             Intent intent = new Intent(this, HeartRateService.class);
             intent.setAction(HeartRateService.ACTION_CALIBRAR);
@@ -72,7 +68,6 @@ public class PatientActivity extends AppCompatActivity implements HeartRateMonit
                     Toast.LENGTH_LONG).show();
         });
 
-        carregarDadosPaciente();
         atualizarLimitesUI();
         verificarPermissoes();
     }
@@ -87,36 +82,19 @@ public class PatientActivity extends AppCompatActivity implements HeartRateMonit
     @Override
     protected void onPause() {
         super.onPause();
-        // Remove o listener — o serviço continua mas não tenta atualizar a UI
+        // Remove o listener — o serviço continua monitorando sem custo de UI
         HeartRateService.setActivityListener(null);
-    }
-
-    // ==================== Dados do paciente ====================
-
-    private void carregarDadosPaciente() {
-        if (uidPaciente == null) return;
-        FirebaseFirestore.getInstance().collection("users").document(uidPaciente).get()
-                .addOnSuccessListener(doc -> {
-                    if (doc.exists()) {
-                        String n = doc.getString("nome");
-                        if (n != null) nomePaciente = n;
-                        uidCuidadorVinculado = doc.getString("cuidadorVinculado");
-                    }
-                });
     }
 
     // ==================== Permissões ====================
 
     private void verificarPermissoes() {
-        // Solicita BODY_SENSORS (obrigatório para o sensor cardíaco)
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.BODY_SENSORS)
                 != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this,
                     new String[]{Manifest.permission.BODY_SENSORS}, REQ_BODY_SENSORS);
             return;
         }
-
-        // Solicita POST_NOTIFICATIONS em Android 13+ para que o serviço exiba notificações
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
                     != PackageManager.PERMISSION_GRANTED) {
@@ -126,7 +104,6 @@ public class PatientActivity extends AppCompatActivity implements HeartRateMonit
                 return;
             }
         }
-
         iniciarServico();
     }
 
@@ -134,23 +111,18 @@ public class PatientActivity extends AppCompatActivity implements HeartRateMonit
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
                                             @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-
         if (requestCode == REQ_BODY_SENSORS) {
-            if (grantResults.length > 0 && grantResults[0] != PackageManager.PERMISSION_GRANTED) {
+            if (grantResults.length == 0 || grantResults[0] != PackageManager.PERMISSION_GRANTED) {
                 tvStatus.setText("Permissão de sensor negada — usando simulador");
             }
-            // Com ou sem permissão, inicia o serviço (cairá no simulador se negado)
-            verificarPermissoes(); // continua para verificar POST_NOTIFICATIONS
+            verificarPermissoes(); // continua para POST_NOTIFICATIONS
         } else if (requestCode == REQ_POST_NOTIFICATIONS) {
-            iniciarServico(); // inicia independente do resultado (notificação é opcional)
+            iniciarServico();
         }
     }
 
-    // ==================== Serviço ====================
-
     private void iniciarServico() {
-        Intent intent = new Intent(this, HeartRateService.class);
-        ContextCompat.startForegroundService(this, intent);
+        ContextCompat.startForegroundService(this, new Intent(this, HeartRateService.class));
         atualizarLimitesUI();
     }
 
@@ -170,11 +142,11 @@ public class PatientActivity extends AppCompatActivity implements HeartRateMonit
 
     @Override
     public void onAnomaly(int bpm, HeartRateMonitor.AnomalyType tipo) {
-        String mensagem = tipo == HeartRateMonitor.AnomalyType.HIGH
-                ? "Frequência ALTA: " + bpm + " bpm"
-                : "Frequência BAIXA: " + bpm + " bpm";
-        Toast.makeText(this, mensagem, Toast.LENGTH_LONG).show();
-        // O envio ao Firebase já é feito pelo HeartRateService
+        // Mostra mensagem local no relógio; o envio ao Firebase é feito pelo serviço
+        String msg = tipo == HeartRateMonitor.AnomalyType.HIGH
+                ? "Freq. ALTA: " + bpm + " bpm"
+                : "Freq. BAIXA: " + bpm + " bpm";
+        Toast.makeText(this, msg, Toast.LENGTH_LONG).show();
     }
 
     @Override
@@ -190,7 +162,7 @@ public class PatientActivity extends AppCompatActivity implements HeartRateMonit
         atualizarLimitesUI();
         Toast.makeText(this,
                 "Calibração concluída!\nBaseline: " + baseline
-                        + " bpm | Intervalo: " + min + "–" + max,
+                        + " | Intervalo: " + min + "–" + max + " bpm",
                 Toast.LENGTH_LONG).show();
     }
 
@@ -203,7 +175,6 @@ public class PatientActivity extends AppCompatActivity implements HeartRateMonit
                     + svc.getMonitor().getBpmMin() + "–"
                     + svc.getMonitor().getBpmMax() + " bpm");
         } else {
-            // Lê dos SharedPreferences antes do serviço subir
             SharedPreferences prefs = getSharedPreferences("heart_rate_prefs", MODE_PRIVATE);
             int min = prefs.getInt("bpm_min", 50);
             int max = prefs.getInt("bpm_max", 120);
@@ -234,29 +205,19 @@ public class PatientActivity extends AppCompatActivity implements HeartRateMonit
     // ==================== Emergência manual ====================
 
     private void dispararEmergenciaManual() {
-        if (uidPaciente == null || uidCuidadorVinculado == null
-                || uidCuidadorVinculado.isEmpty()) {
+        HeartRateService svc = HeartRateService.getInstance();
+        if (svc == null || svc.getCuidadoresVinculados().isEmpty()) {
             Toast.makeText(this, "Vincule-se a um cuidador primeiro",
                     Toast.LENGTH_SHORT).show();
             return;
         }
-        int bpmAtual = 0;
-        try {
-            bpmAtual = Integer.parseInt(tvBpmValue.getText().toString());
-        } catch (NumberFormatException ignored) {}
 
-        FirebaseHelper.enviarAlerta(uidPaciente, nomePaciente, uidCuidadorVinculado,
-                bpmAtual, "MANUAL", new FirebaseHelper.Callback<String>() {
-                    @Override
-                    public void onResult(String alertaId) {
-                        Toast.makeText(PatientActivity.this,
-                                "Alerta de emergência enviado!", Toast.LENGTH_LONG).show();
-                    }
-                    @Override
-                    public void onError(Exception e) {
-                        Toast.makeText(PatientActivity.this,
-                                "Falha ao enviar alerta", Toast.LENGTH_LONG).show();
-                    }
-                });
+        int bpmAtual = 0;
+        try { bpmAtual = Integer.parseInt(tvBpmValue.getText().toString()); }
+        catch (NumberFormatException ignored) {}
+
+        // Delega ao serviço — ele envia para TODOS os cuidadores simultaneamente
+        svc.dispararEmergenciaManual(bpmAtual);
+        Toast.makeText(this, "Alerta de emergência enviado!", Toast.LENGTH_LONG).show();
     }
 }
