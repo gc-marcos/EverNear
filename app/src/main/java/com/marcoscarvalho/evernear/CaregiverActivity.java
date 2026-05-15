@@ -4,8 +4,12 @@ import android.Manifest;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.PowerManager;
+import android.provider.Settings;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
@@ -19,7 +23,6 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
-import com.google.firebase.Timestamp;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.firestore.DocumentChange;
 import com.google.firebase.firestore.FirebaseFirestore;
@@ -47,14 +50,13 @@ public class CaregiverActivity extends AppCompatActivity {
     private ListenerRegistration alertasListener;
 
     private String telefonePaciente;
-    private String uidPacienteAtivo;          // paciente exibido no card_alert
+    private String uidPacienteAtivo;
 
-    // Cache: uid → {nome, apelido} para construir os chips sem re-consultar
-    private final List<String> todosUids = new ArrayList<>();
-    private final Map<String, String> nomesPorUid = new HashMap<>(); // uid → texto exibir
+    private final List<String> todosUids          = new ArrayList<>();
+    private final Map<String, String> nomesPorUid = new HashMap<>();
 
-    private long appStartTimestamp;
-    private final Map<String, Boolean> alertasJaExibidos = new HashMap<>();
+    // Alertas já exibidos nesta sessão (em memória — evita duplicata enquanto a tela está aberta)
+    private final java.util.Set<String> alertasExibidos = new java.util.HashSet<>();
 
     // ==================== Ciclo de vida ====================
 
@@ -63,15 +65,14 @@ public class CaregiverActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_caregiver);
 
-        tvPatientName        = findViewById(R.id.tv_patient_name);
-        tvAvatarInitials     = findViewById(R.id.tv_avatar_initials);
-        tvBpmValue           = findViewById(R.id.tv_bpm_value);
-        btnCall              = findViewById(R.id.btn_call);
+        tvPatientName          = findViewById(R.id.tv_patient_name);
+        tvAvatarInitials       = findViewById(R.id.tv_avatar_initials);
+        tvBpmValue             = findViewById(R.id.tv_bpm_value);
+        btnCall                = findViewById(R.id.btn_call);
         llPacientesSecundarios = findViewById(R.id.ll_pacientes_secundarios);
 
         db = FirebaseFirestore.getInstance();
         uidCuidador = FirebaseAuth.getInstance().getUid();
-        appStartTimestamp = System.currentTimeMillis();
 
         View ivBack = findViewById(R.id.iv_back);
         if (ivBack != null) ivBack.setOnClickListener(v -> finish());
@@ -84,12 +85,61 @@ public class CaregiverActivity extends AppCompatActivity {
 
         if (btnCall != null) btnCall.setOnClickListener(v -> ligarParaPaciente());
 
-        // Inicia serviço de alertas em segundo plano para o cuidador
+        // Inicia o serviço de alertas em segundo plano
         ContextCompat.startForegroundService(this,
                 new Intent(this, CaregiverAlertService.class));
 
+        // Solicita isenção de otimização de bateria para garantir recebimento de alertas
+        solicitarIsencaoBateria();
+
         carregarDadosCuidador();
-        ouvirAlertas();
+        ouvirAlertasComApp();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (cuidadorListener != null) cuidadorListener.remove();
+        if (pacienteListener  != null) pacienteListener.remove();
+        if (alertasListener   != null) alertasListener.remove();
+    }
+
+    // ==================== Isenção de otimização de bateria ====================
+
+    /**
+     * Solicita ao usuário que isente o app da otimização de bateria do Android.
+     * Sem isso, o sistema pode suspender o CaregiverAlertService agressivamente,
+     * especialmente em fabricantes como Samsung, Huawei e Xiaomi.
+     *
+     * A isenção é solicitada apenas uma vez (se ainda não concedida).
+     */
+    private void solicitarIsencaoBateria() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return;
+
+        PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+        if (pm == null) return;
+
+        String packageName = getPackageName();
+        if (pm.isIgnoringBatteryOptimizations(packageName)) return; // já isento
+
+        new AlertDialog.Builder(this)
+                .setTitle("Permitir recebimento de alertas")
+                .setMessage("Para receber alertas do paciente mesmo com o app fechado, "
+                        + "o EverNear precisa ser excluído da otimização de bateria.\n\n"
+                        + "Toque em \"Permitir\" e selecione \"Não otimizar\".")
+                .setCancelable(false)
+                .setPositiveButton("Permitir", (dialog, which) -> {
+                    Intent intent = new Intent(
+                            Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                            Uri.parse("package:" + packageName));
+                    try { startActivity(intent); }
+                    catch (Exception e) {
+                        // Fallback: abre a tela de configuração geral de bateria
+                        startActivity(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
+                    }
+                })
+                .setNegativeButton("Agora não", null)
+                .show();
     }
 
     // ==================== Carregamento dos pacientes vinculados ====================
@@ -105,7 +155,6 @@ public class CaregiverActivity extends AppCompatActivity {
                     List<String> uids = (List<String>) snapshot.get("pacientesVinculados");
 
                     if (uids == null || uids.isEmpty()) {
-                        // Nenhum paciente — mostra estado vazio no card
                         tvPatientName.setText("Nenhum paciente vinculado");
                         tvAvatarInitials.setText("?");
                         tvBpmValue.setText("--");
@@ -122,23 +171,16 @@ public class CaregiverActivity extends AppCompatActivity {
                     todosUids.clear();
                     todosUids.addAll(uids);
 
-                    // Se ainda não há paciente ativo (primeira carga), usa o primeiro
                     if (uidPacienteAtivo == null || !uids.contains(uidPacienteAtivo)) {
                         uidPacienteAtivo = uids.get(0);
                         ouvirPaciente(uidPacienteAtivo);
                     }
 
-                    // Carrega nomes de todos os pacientes para montar os chips
                     carregarNomesEConstruirChips(uids);
                 });
     }
 
-    /**
-     * Busca o nome/apelido de cada paciente e depois reconstrói a lista de chips.
-     * Usa cache (nomesPorUid) para não rebuscar o que já foi carregado.
-     */
     private void carregarNomesEConstruirChips(List<String> uids) {
-        // Quantos ainda faltam ser resolvidos
         final int[] pendentes = {uids.size()};
 
         for (String uid : uids) {
@@ -167,18 +209,13 @@ public class CaregiverActivity extends AppCompatActivity {
         }
     }
 
-    /**
-     * Reconstrói todos os chips de paciente na lista horizontal.
-     * O paciente ativo aparece com avatar destacado; os demais com cor normal.
-     */
     private void construirChips(List<String> uids) {
         llPacientesSecundarios.removeAllViews();
 
         for (String uid : uids) {
-            String nome = nomesPorUid.getOrDefault(uid, "Paciente");
+            String nome  = nomesPorUid.getOrDefault(uid, "Paciente");
             boolean ativo = uid.equals(uidPacienteAtivo);
 
-            // Container vertical (avatar + nome)
             LinearLayout item = new LinearLayout(this);
             item.setOrientation(LinearLayout.VERTICAL);
             item.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -189,7 +226,6 @@ public class CaregiverActivity extends AppCompatActivity {
             item.setLayoutParams(itemParams);
             item.setTag(uid);
 
-            // Avatar circular com iniciais
             TextView avatar = new TextView(this);
             LinearLayout.LayoutParams avParams = new LinearLayout.LayoutParams(52, 52);
             avatar.setLayoutParams(avParams);
@@ -198,22 +234,12 @@ public class CaregiverActivity extends AppCompatActivity {
             avatar.setTextColor(Color.WHITE);
             avatar.setTextSize(14f);
             avatar.setTypeface(null, android.graphics.Typeface.BOLD);
-            // Ativo: vermelho médico; inativo: cinza escuro
-            avatar.setBackgroundResource(ativo
-                    ? R.drawable.bg_caregiver_avatar_inner   // mesmo drawable mas tintado
-                    : R.drawable.bg_caregiver_avatar_inner);
-            // Diferencia visualmente: ativo usa cor de alerta, inativo usa cinza
-            avatar.setBackgroundColor(ativo
-                    ? Color.parseColor("#C0392B")
-                    : Color.parseColor("#2C3E50"));
-            // Arredonda o fundo programaticamente
-            android.graphics.drawable.GradientDrawable shape =
-                    new android.graphics.drawable.GradientDrawable();
-            shape.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+
+            GradientDrawable shape = new GradientDrawable();
+            shape.setShape(GradientDrawable.OVAL);
             shape.setColor(ativo ? Color.parseColor("#C0392B") : Color.parseColor("#2C3E50"));
             avatar.setBackground(shape);
 
-            // Nome abaixo do avatar
             TextView tvNome = new TextView(this);
             tvNome.setLayoutParams(new LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT,
@@ -227,13 +253,12 @@ public class CaregiverActivity extends AppCompatActivity {
             item.addView(avatar);
             item.addView(tvNome);
 
-            // Clique: troca o paciente ativo
             final String uidChip = uid;
             item.setOnClickListener(v -> {
                 if (!uidChip.equals(uidPacienteAtivo)) {
                     uidPacienteAtivo = uidChip;
                     ouvirPaciente(uidChip);
-                    construirChips(todosUids); // atualiza destaque
+                    construirChips(todosUids);
                 }
             });
 
@@ -257,7 +282,6 @@ public class CaregiverActivity extends AppCompatActivity {
                     if (exibir != null) {
                         tvPatientName.setText(exibir);
                         tvAvatarInitials.setText(gerarIniciais(exibir));
-                        // Atualiza o cache de nome para refletir mudanças
                         nomesPorUid.put(uidPaciente, exibir);
                     }
 
@@ -285,13 +309,78 @@ public class CaregiverActivity extends AppCompatActivity {
                 });
     }
 
+    // ==================== Alertas em tempo real (com app aberto) ====================
+
+    /**
+     * Ouve alertas em tempo real enquanto a CaregiverActivity está aberta.
+     * Exibe um AlertDialog para confirmação imediata.
+     *
+     * NÃO usa filtro por timestamp — qualquer alerta não confirmado é exibido,
+     * inclusive alertas gerados enquanto o app estava fechado.
+     * O conjunto alertasExibidos (em memória) evita duplicatas nesta sessão.
+     */
+    private void ouvirAlertasComApp() {
+        if (uidCuidador == null) return;
+
+        alertasListener = db.collection("alerts")
+                .whereEqualTo("cuidadorId", uidCuidador)
+                .whereEqualTo("acknowledged", false)
+                .addSnapshotListener((snapshots, e) -> {
+                    if (e != null || snapshots == null) return;
+
+                    for (DocumentChange dc : snapshots.getDocumentChanges()) {
+                        if (dc.getType() != DocumentChange.Type.ADDED) continue;
+
+                        String alertaId = dc.getDocument().getId();
+                        if (alertasExibidos.contains(alertaId)) continue;
+                        alertasExibidos.add(alertaId);
+
+                        String nomePaciente = dc.getDocument().getString("pacienteNome");
+                        Long   bpm          = dc.getDocument().getLong("bpm");
+                        String tipo         = dc.getDocument().getString("tipo");
+
+                        exibirAlertaDialog(alertaId, nomePaciente,
+                                bpm != null ? bpm.intValue() : 0, tipo);
+                    }
+                });
+    }
+
+    private void exibirAlertaDialog(String alertaId, String paciente, int bpm, String tipo) {
+        String titulo;
+        if ("MANUAL".equals(tipo))    titulo = "🚨 EMERGÊNCIA acionada";
+        else if ("HIGH".equals(tipo)) titulo = "❤ Frequência ALTA";
+        else                          titulo = "💙 Frequência BAIXA";
+
+        String msg = (paciente != null ? paciente : "Paciente")
+                + "\n\nBPM: " + bpm + "\nTipo: " + tipo;
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(this)
+                .setTitle(titulo)
+                .setMessage(msg)
+                .setCancelable(false)
+                .setPositiveButton("Confirmar recebimento", (dialog, which) -> {
+                    db.collection("alerts").document(alertaId)
+                            .update("acknowledged", true);
+                    Toast.makeText(this, "Alerta confirmado", Toast.LENGTH_SHORT).show();
+                });
+
+        if (telefonePaciente != null && !telefonePaciente.isEmpty()) {
+            builder.setNeutralButton("📞 Ligar agora", (dialog, which) -> {
+                db.collection("alerts").document(alertaId)
+                        .update("acknowledged", true);
+                ligarParaPaciente();
+            });
+        }
+
+        builder.show();
+    }
+
     // ==================== Ligar para o paciente ====================
 
     private void ligarParaPaciente() {
         if (telefonePaciente == null || telefonePaciente.isEmpty()) {
             Toast.makeText(this,
-                    "Nenhum telefone cadastrado para este paciente",
-                    Toast.LENGTH_LONG).show();
+                    "Nenhum telefone cadastrado para este paciente", Toast.LENGTH_LONG).show();
             return;
         }
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CALL_PHONE)
@@ -316,74 +405,11 @@ public class CaregiverActivity extends AppCompatActivity {
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
                                             @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == REQ_CALL_PHONE) {
-            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                discaParaTelefone(telefonePaciente);
-            } else {
-                Toast.makeText(this,
-                        "Permissão negada — ligue manualmente para " + telefonePaciente,
-                        Toast.LENGTH_LONG).show();
-            }
+        if (requestCode == REQ_CALL_PHONE
+                && grantResults.length > 0
+                && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            discaParaTelefone(telefonePaciente);
         }
-    }
-
-    // ==================== Alertas em tempo real ====================
-
-    private void ouvirAlertas() {
-        if (uidCuidador == null) return;
-
-        alertasListener = db.collection("alerts")
-                .whereEqualTo("cuidadorId", uidCuidador)
-                .whereEqualTo("acknowledged", false)
-                .addSnapshotListener((snapshots, e) -> {
-                    if (e != null || snapshots == null) return;
-
-                    for (DocumentChange dc : snapshots.getDocumentChanges()) {
-                        if (dc.getType() != DocumentChange.Type.ADDED) continue;
-
-                        String alertaId = dc.getDocument().getId();
-                        if (alertasJaExibidos.containsKey(alertaId)) continue;
-                        alertasJaExibidos.put(alertaId, true);
-
-                        Timestamp ts = dc.getDocument().getTimestamp("timestamp");
-                        if (ts != null && ts.toDate().getTime() < appStartTimestamp - 5_000) continue;
-
-                        String nomePaciente = dc.getDocument().getString("pacienteNome");
-                        Long bpm = dc.getDocument().getLong("bpm");
-                        String tipo = dc.getDocument().getString("tipo");
-
-                        exibirAlerta(alertaId, nomePaciente,
-                                bpm != null ? bpm.intValue() : 0, tipo);
-                    }
-                });
-    }
-
-    private void exibirAlerta(String alertaId, String paciente, int bpm, String tipo) {
-        String titulo;
-        if ("MANUAL".equals(tipo))      titulo = "🚨 EMERGÊNCIA acionada";
-        else if ("HIGH".equals(tipo))   titulo = "❤️ Frequência ALTA";
-        else                            titulo = "💙 Frequência BAIXA";
-
-        String msg = (paciente != null ? paciente : "Paciente")
-                + "\n\nBPM: " + bpm + "\nTipo: " + tipo;
-
-        AlertDialog.Builder builder = new AlertDialog.Builder(this)
-                .setTitle(titulo)
-                .setMessage(msg)
-                .setCancelable(false)
-                .setPositiveButton("Confirmar recebimento", (dialog, which) -> {
-                    db.collection("alerts").document(alertaId).update("acknowledged", true);
-                    Toast.makeText(this, "Alerta confirmado", Toast.LENGTH_SHORT).show();
-                });
-
-        if (telefonePaciente != null && !telefonePaciente.isEmpty()) {
-            builder.setNeutralButton("📞 Ligar agora", (dialog, which) -> {
-                db.collection("alerts").document(alertaId).update("acknowledged", true);
-                ligarParaPaciente();
-            });
-        }
-
-        builder.show();
     }
 
     // ==================== Utilitários ====================
@@ -391,17 +417,8 @@ public class CaregiverActivity extends AppCompatActivity {
     private String gerarIniciais(String nome) {
         if (nome == null || nome.isEmpty()) return "?";
         String[] partes = nome.trim().split("\\s+");
-        if (partes.length == 1) {
+        if (partes.length == 1)
             return partes[0].substring(0, Math.min(2, partes[0].length())).toUpperCase();
-        }
         return (partes[0].charAt(0) + "" + partes[partes.length - 1].charAt(0)).toUpperCase();
-    }
-
-    @Override
-    protected void onStop() {
-        super.onStop();
-        if (cuidadorListener != null) cuidadorListener.remove();
-        if (pacienteListener != null) pacienteListener.remove();
-        if (alertasListener != null) alertasListener.remove();
     }
 }

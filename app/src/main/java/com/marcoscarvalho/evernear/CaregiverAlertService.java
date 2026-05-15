@@ -8,6 +8,7 @@ import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.os.Build;
 import android.os.IBinder;
 import android.os.SystemClock;
@@ -27,17 +28,21 @@ import java.util.Set;
 /**
  * Serviço em primeiro plano no dispositivo do CUIDADOR (celular/tablet).
  *
- * ┌─ Por que funciona com o app fechado? ──────────────────────────────────────┐
- * │  1. Foreground Service: mantido vivo pelo Android (não encerrado pelo GC). │
- * │  2. Firestore snapshot listener: recebe alertas do paciente em tempo real, │
- * │     mesmo sem a CaregiverActivity aberta.                                   │
- * │  3. Notificação de alta prioridade: aparece na barra de status, vibra e    │
- * │     exibe painel completo (heads-up) mesmo com outra app em foco.           │
- * │  4. Full-screen Intent: em emergências (tipo MANUAL), a notificação abre   │
- * │     diretamente na tela de bloqueio — comportamento de alarme.             │
- * │  5. START_STICKY + onTaskRemoved + AlarmManager: reinicia o serviço se     │
- * │     o sistema ou o usuário encerrar o app.                                  │
- * └────────────────────────────────────────────────────────────────────────────┘
+ * Mantém um Firestore snapshot listener ativo mesmo com o app completamente fechado.
+ * Quando um alerta do paciente chega, exibe notificação de alta prioridade.
+ *
+ * ── Rastreamento de alertas já notificados ───────────────────────────────────
+ * Os IDs dos alertas notificados são persistidos em SharedPreferences (disco),
+ * não em memória. Isso garante que:
+ *  1. Alertas criados enquanto o serviço estava morto NÃO são ignorados quando
+ *     o serviço reinicia (o filtro por timestamp causava exatamente esse bug).
+ *  2. Alertas antigos já confirmados não se repetem em reinicializações.
+ *  3. Alertas gerados offline pelo relógio são entregues quando a rede volta.
+ *
+ * ── Reinício após encerramento ───────────────────────────────────────────────
+ *  • START_STICKY: Android reinicia automaticamente
+ *  • onTaskRemoved + setExactAndAllowWhileIdle: reinicia em 5 s mesmo em Doze
+ *  • BootReceiver: reinicia quando o dispositivo é ligado
  */
 public class CaregiverAlertService extends Service {
 
@@ -48,15 +53,20 @@ public class CaregiverAlertService extends Service {
     private static final int    NOTIF_ID_FG     = 2001;
     private static final int    NOTIF_ID_ALERT  = 2002;
 
+    // SharedPreferences: persiste IDs de alertas já notificados entre reinicializações
+    private static final String PREFS_NAME       = "evernear_alertas_notificados";
+    private static final String PREFS_KEY_IDS    = "ids_notificados";
+    private static final int    MAX_IDS_SALVOS   = 200; // evita crescimento ilimitado
+
     private static CaregiverAlertService instance;
 
     private NotificationManager notifManager;
     private ListenerRegistration alertasListener;
     private String uidCuidador;
+    private SharedPreferences prefs;
 
-    // Evita repetir notificação para o mesmo alerta (re-entradas do listener)
-    private final Set<String> alertasNotificados = new HashSet<>();
-    private long serviceStartTime;
+    // Conjunto de IDs já notificados — carregado do disco, persistido a cada novo alerta
+    private Set<String> alertasNotificados;
 
     // ==================== API estática ====================
 
@@ -68,29 +78,30 @@ public class CaregiverAlertService extends Service {
     public void onCreate() {
         super.onCreate();
         instance = this;
-        serviceStartTime = System.currentTimeMillis();
         notifManager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         criarCanais();
+
+        // Carrega IDs de alertas já notificados do disco (persiste entre reinicializações)
+        prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+        Set<String> salvo = prefs.getStringSet(PREFS_KEY_IDS, new HashSet<>());
+        alertasNotificados = new HashSet<>(salvo); // cópia mutável
+        Log.d(TAG, "IDs já notificados carregados: " + alertasNotificados.size());
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         FirebaseAuth auth = FirebaseAuth.getInstance();
         if (auth.getCurrentUser() == null) {
-            Log.w(TAG, "Sem usuário autenticado — serviço não iniciado");
+            Log.w(TAG, "Sem usuário autenticado — serviço encerrado");
             stopSelf();
             return START_NOT_STICKY;
         }
 
         uidCuidador = auth.getUid();
-
-        // Notificação persistente obrigatória para foreground service
         startForeground(NOTIF_ID_FG, buildFgNotification());
-
-        // Inicia listener do Firestore
         ouvirAlertas();
 
-        Log.d(TAG, "CaregiverAlertService iniciado — ouvindo alertas para: " + uidCuidador);
+        Log.d(TAG, "Serviço iniciado — ouvindo alertas para cuidador: " + uidCuidador);
         return START_STICKY;
     }
 
@@ -102,20 +113,25 @@ public class CaregiverAlertService extends Service {
     }
 
     /**
-     * Reagenda o serviço se o usuário remover o app da lista de recentes.
+     * Quando o usuário fecha o app da lista de recentes, agenda reinício
+     * usando setExactAndAllowWhileIdle para funcionar mesmo em modo Doze.
      */
     @Override
     public void onTaskRemoved(Intent rootIntent) {
-        Log.w(TAG, "App removido da lista de recentes — agendando reinício em 5s");
-        PendingIntent reiniciar = PendingIntent.getService(
-                this, 2,
-                new Intent(this, CaregiverAlertService.class),
+        Log.w(TAG, "App removido da lista de recentes — agendando reinício em 5 s");
+
+        Intent reiniciarIntent = new Intent(this, CaregiverAlertService.class);
+        PendingIntent pi = PendingIntent.getService(
+                this, 2, reiniciarIntent,
                 PendingIntent.FLAG_ONE_SHOT | PendingIntent.FLAG_IMMUTABLE);
 
         AlarmManager am = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
         if (am != null) {
-            am.set(AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                    SystemClock.elapsedRealtime() + 5_000L, reiniciar);
+            // setExactAndAllowWhileIdle: dispara mesmo durante Doze mode
+            am.setExactAndAllowWhileIdle(
+                    AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                    SystemClock.elapsedRealtime() + 5_000L,
+                    pi);
         }
         super.onTaskRemoved(rootIntent);
     }
@@ -124,7 +140,7 @@ public class CaregiverAlertService extends Service {
     @Override
     public IBinder onBind(Intent intent) { return null; }
 
-    // ==================== Listener de alertas do Firestore ====================
+    // ==================== Listener de alertas ====================
 
     private void ouvirAlertas() {
         if (uidCuidador == null) return;
@@ -141,22 +157,20 @@ public class CaregiverAlertService extends Service {
                     if (snapshots == null) return;
 
                     for (DocumentChange dc : snapshots.getDocumentChanges()) {
+                        // Só processa documentos novos (ADDED), não modificações/remoções
                         if (dc.getType() != DocumentChange.Type.ADDED) continue;
 
                         String alertaId = dc.getDocument().getId();
 
-                        // Evita duplicata na mesma sessão do serviço
-                        if (alertasNotificados.contains(alertaId)) continue;
-
-                        // Ignora alertas criados antes do serviço iniciar (5s de margem)
-                        com.google.firebase.Timestamp ts =
-                                dc.getDocument().getTimestamp("timestamp");
-                        if (ts != null && ts.toDate().getTime() < serviceStartTime - 5_000L) {
-                            alertasNotificados.add(alertaId); // marca para não repetir
+                        // Pula se já foi notificado nesta sessão OU em sessões anteriores
+                        // (rastreado via SharedPreferences — persiste entre reinicializações)
+                        if (alertasNotificados.contains(alertaId)) {
+                            Log.d(TAG, "Alerta " + alertaId + " já notificado — ignorando");
                             continue;
                         }
 
-                        alertasNotificados.add(alertaId);
+                        // Marca como notificado ANTES de exibir (evita duplicata em re-entradas)
+                        marcarComoNotificado(alertaId);
 
                         String paciente = dc.getDocument().getString("pacienteNome");
                         Long   bpm      = dc.getDocument().getLong("bpm");
@@ -168,11 +182,27 @@ public class CaregiverAlertService extends Service {
                 });
     }
 
+    /**
+     * Persiste o ID no conjunto em memória e em disco.
+     * Limita o tamanho do conjunto para evitar crescimento ilimitado.
+     */
+    private void marcarComoNotificado(String alertaId) {
+        alertasNotificados.add(alertaId);
+
+        // Se ultrapassou o limite, descarta os mais antigos (limpa tudo e reinicia)
+        if (alertasNotificados.size() > MAX_IDS_SALVOS) {
+            alertasNotificados.clear();
+            alertasNotificados.add(alertaId);
+            Log.d(TAG, "Cache de IDs limpo (excedeu " + MAX_IDS_SALVOS + " entradas)");
+        }
+
+        prefs.edit().putStringSet(PREFS_KEY_IDS, alertasNotificados).apply();
+    }
+
     // ==================== Notificações ====================
 
     private void criarCanais() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            // Canal de foreground: baixa prioridade (só para manter o serviço ativo)
             NotificationChannel fg = new NotificationChannel(
                     CHANNEL_ID_FG,
                     "EverNear — Monitor Cuidador",
@@ -181,7 +211,6 @@ public class CaregiverAlertService extends Service {
             fg.setShowBadge(false);
             notifManager.createNotificationChannel(fg);
 
-            // Canal de alertas: máxima prioridade (acorda tela, vibra, toca som)
             NotificationChannel alrt = new NotificationChannel(
                     CHANNEL_ID_ALRT,
                     "Alertas do Paciente",
@@ -189,8 +218,8 @@ public class CaregiverAlertService extends Service {
             alrt.setDescription("Notificações de emergência e batimentos fora do normal");
             alrt.enableVibration(true);
             alrt.enableLights(true);
-            alrt.setLightColor(0xFFFF0000); // LED vermelho se disponível
-            alrt.setBypassDnd(true);        // ignora modo "Não perturbe" para emergências
+            alrt.setLightColor(0xFFFF0000);
+            alrt.setBypassDnd(true);
             notifManager.createNotificationChannel(alrt);
         }
     }
@@ -212,17 +241,6 @@ public class CaregiverAlertService extends Service {
                 .build();
     }
 
-    /**
-     * Exibe notificação de alta prioridade quando um alerta do Firestore chega.
-     *
-     * Para emergências (tipo MANUAL):
-     *  - Usa setFullScreenIntent() → aparece na tela de bloqueio como um alarme,
-     *    mesmo que o celular esteja com tela apagada.
-     *
-     * Para anomalias de BPM (HIGH/LOW):
-     *  - Heads-up notification com vibração e som.
-     *  - BigTextStyle com instruções.
-     */
     private void exibirNotificacaoAlerta(String alertaId, String paciente, int bpm, String tipo) {
         String titulo;
         String emoji;
@@ -242,7 +260,6 @@ public class CaregiverAlertService extends Service {
         String nomePac = (paciente != null && !paciente.isEmpty()) ? paciente : "Paciente";
         String texto   = nomePac + " — " + bpm + " bpm";
 
-        // Intent para abrir a CaregiverActivity ao tocar na notificação
         Intent openApp = new Intent(this, CaregiverActivity.class);
         openApp.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         PendingIntent piAbrir = PendingIntent.getActivity(
@@ -256,23 +273,20 @@ public class CaregiverAlertService extends Service {
                 .setStyle(new NotificationCompat.BigTextStyle()
                         .bigText(nomePac
                                 + "\nBPM: " + bpm
-                                + "\n\nToque para abrir o app e confirmar o alerta."))
+                                + "\n\nToque para abrir o app e confirmar."))
                 .setContentIntent(piAbrir)
                 .setAutoCancel(true)
-                .setPriority(NotificationCompat.PRIORITY_MAX) // MAX para emergências
+                .setPriority(NotificationCompat.PRIORITY_MAX)
                 .setCategory(NotificationCompat.CATEGORY_ALARM)
                 .setDefaults(NotificationCompat.DEFAULT_ALL);
 
-        // Full-screen Intent: para emergências, exibe sobre a tela de bloqueio
-        // (comportamento de alarme — requer USE_FULL_SCREEN_INTENT no manifest)
+        // Emergências: full-screen intent (aparece sobre a tela de bloqueio como alarme)
         if (isEmergencia) {
             builder.setFullScreenIntent(piAbrir, true);
-            builder.setOngoing(true); // não pode ser dispensada sem ação
+            builder.setOngoing(true);
         }
 
-        // ID único por alerta: múltiplos alertas não se sobrepõem
         notifManager.notify(NOTIF_ID_ALERT + alertaId.hashCode(), builder.build());
-
         Log.d(TAG, "Notificação exibida: " + titulo + " | " + texto);
     }
 }
