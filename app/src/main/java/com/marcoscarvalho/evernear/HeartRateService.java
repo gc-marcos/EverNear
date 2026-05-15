@@ -1,15 +1,19 @@
 package com.marcoscarvalho.evernear;
 
+import android.app.AlarmManager;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.content.Context;
 import android.content.Intent;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.os.PowerManager;
+import android.os.SystemClock;
 import android.util.Log;
 
 import androidx.annotation.Nullable;
@@ -24,18 +28,25 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Foreground Service de monitoramento cardíaco — roda no dispositivo do PACIENTE.
+ * Serviço de monitoramento contínuo de batimentos cardíacos — roda no SMARTWATCH do paciente.
  *
- * Responsabilidades:
- *  1. Ler frequência cardíaca via SensorManager / simulador
- *  2. Detectar anomalias e enviar alertas ao Firestore
- *  3. Escalada automática de alertas para múltiplos cuidadores:
- *       - Envia primeiro ao cuidador de prioridade 0
- *       - Se não confirmado em 5 minutos → envia ao cuidador 1 (se existir)
- *       - Se não confirmado em mais 5 minutos → envia ao cuidador 2 (se existir)
- *  4. Manter notificação persistente com BPM atual
+ * ┌─ Por que funciona com o app fechado? ──────────────────────────────────────┐
+ * │  1. Foreground Service: o Android não encerra processos em primeiro plano  │
+ * │     sem motivo crítico de memória.                                          │
+ * │  2. WakeLock (PARTIAL_WAKE_LOCK): mantém a CPU ativa mesmo com tela        │
+ * │     apagada, garantindo que o SensorManager continue entregando leituras.   │
+ * │  3. START_STICKY: se o sistema encerrar o serviço por pressão de memória,  │
+ * │     o Android o reinicia automaticamente.                                   │
+ * │  4. onTaskRemoved + AlarmManager: se o usuário remover o app da lista de   │
+ * │     recentes, agenda reinício em 5 segundos via AlarmManager.               │
+ * │  5. BootReceiver: reinicia o serviço quando o relógio é ligado.            │
+ * └────────────────────────────────────────────────────────────────────────────┘
  *
- * Dados do paciente são mantidos via snapshot listener (sempre atualizados).
+ * Escalada de alertas:
+ *  - Anomalia detectada → envia para cuidador[0]
+ *  - Se não confirmado em 5 min → envia para cuidador[1]
+ *  - Se não confirmado em 5 min → envia para cuidador[2]
+ *  - Emergência manual → todos os cuidadores simultaneamente
  */
 public class HeartRateService extends Service implements HeartRateMonitor.Listener {
 
@@ -47,25 +58,29 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
     private static final String CHANNEL_ID  = "evernear_monitor";
     private static final int    NOTIF_ID    = 1001;
 
-    // Tempo de espera antes de escalar para o próximo cuidador (5 minutos)
+    /** Tempo de espera antes de escalar para o próximo cuidador: 5 minutos. */
     private static final long ESCALADA_MS = 5 * 60 * 1000L;
+
+    // Tag WakeLock — único por processo para evitar duplicação
+    private static final String WAKELOCK_TAG = "EverNear:HeartRateWakeLock";
 
     private static HeartRateService instance;
     private static WeakReference<HeartRateMonitor.Listener> activityListenerRef;
 
     private HeartRateMonitor monitor;
     private NotificationManager notifManager;
+    private PowerManager.WakeLock wakeLock;
     private final Handler escaladaHandler = new Handler(Looper.getMainLooper());
 
-    // Dados do paciente — atualizados em tempo real via snapshot listener
+    // Dados do paciente (atualizados em tempo real via Firestore snapshot listener)
     private String uidPaciente;
     private String nomePaciente = "Paciente";
-    private List<String> cuidadoresVinculados = new ArrayList<>(); // ordem = prioridade de escalada
+    private List<String> cuidadoresVinculados = new ArrayList<>();
     private ListenerRegistration pacienteDataListener;
     private boolean monitorIniciado = false;
 
-    // Throttle
-    private long lastNotifUpdate    = 0;
+    // Throttle: evita flood de notificações/Firestore
+    private long lastNotifUpdate     = 0;
     private long lastFirestoreUpdate = 0;
     private static final long NOTIF_UPDATE_INTERVAL_MS     = 3_000L;
     private static final long FIRESTORE_UPDATE_INTERVAL_MS = 5_000L;
@@ -79,7 +94,6 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
         activityListenerRef = listener != null ? new WeakReference<>(listener) : null;
     }
 
-    /** Lista de UIDs dos cuidadores vinculados (em ordem de prioridade). */
     public List<String> getCuidadoresVinculados() {
         return new ArrayList<>(cuidadoresVinculados);
     }
@@ -92,6 +106,7 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
         instance = this;
         notifManager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         criarCanalNotificacao();
+        adquirirWakeLock();
     }
 
     @Override
@@ -108,9 +123,9 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
             }
         }
 
-        startForeground(NOTIF_ID, buildNotification("Iniciando...", "--"));
+        startForeground(NOTIF_ID, buildNotification("Iniciando monitoramento...", "--"));
         carregarDadosPaciente();
-        return START_STICKY;
+        return START_STICKY; // reinicia automaticamente se o sistema encerrar
     }
 
     @Override
@@ -118,13 +133,68 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
         escaladaHandler.removeCallbacksAndMessages(null);
         if (pacienteDataListener != null) pacienteDataListener.remove();
         if (monitor != null) monitor.parar();
+        liberarWakeLock();
         instance = null;
         super.onDestroy();
+    }
+
+    /**
+     * Chamado quando o usuário remove o app da lista de recentes (swipe).
+     * Agenda reinício em 5 segundos via AlarmManager para garantir continuidade.
+     */
+    @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        Log.w(TAG, "App removido da lista de recentes — agendando reinício em 5s");
+        PendingIntent reiniciar = PendingIntent.getService(
+                this, 1,
+                new Intent(this, HeartRateService.class),
+                PendingIntent.FLAG_ONE_SHOT | PendingIntent.FLAG_IMMUTABLE);
+
+        AlarmManager am = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
+        if (am != null) {
+            am.set(AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                    SystemClock.elapsedRealtime() + 5_000L, reiniciar);
+        }
+        super.onTaskRemoved(rootIntent);
     }
 
     @Nullable
     @Override
     public IBinder onBind(Intent intent) { return null; }
+
+    // ==================== WakeLock ====================
+
+    /**
+     * PARTIAL_WAKE_LOCK: mantém apenas a CPU ativa (não a tela).
+     * Essencial para que o SensorManager continue entregando leituras
+     * quando a tela do relógio apaga (modo ambient/sleep).
+     */
+    private void adquirirWakeLock() {
+        try {
+            PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+            if (pm == null) return;
+            wakeLock = pm.newWakeLock(
+                    PowerManager.PARTIAL_WAKE_LOCK, WAKELOCK_TAG);
+            wakeLock.setReferenceCounted(false);
+            if (!wakeLock.isHeld()) {
+                wakeLock.acquire(); // sem timeout: liberado manualmente no onDestroy
+                Log.d(TAG, "WakeLock adquirido — CPU permanecerá ativa em segundo plano");
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Não foi possível adquirir WakeLock: " + e.getMessage());
+        }
+    }
+
+    private void liberarWakeLock() {
+        try {
+            if (wakeLock != null && wakeLock.isHeld()) {
+                wakeLock.release();
+                Log.d(TAG, "WakeLock liberado");
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Erro ao liberar WakeLock: " + e.getMessage());
+        }
+    }
 
     // ==================== Inicialização ====================
 
@@ -138,8 +208,8 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
 
         uidPaciente = auth.getUid();
 
-        // Snapshot listener: garante que cuidadoresVinculados fica sempre atualizado,
-        // inclusive se o vínculo for feito DEPOIS que o serviço já estava rodando.
+        // Snapshot listener: mantém cuidadoresVinculados sempre atualizado
+        // mesmo se o vínculo for feito depois que o serviço já estava rodando.
         pacienteDataListener = FirebaseFirestore.getInstance()
                 .collection("users").document(uidPaciente)
                 .addSnapshotListener((doc, e) -> {
@@ -152,20 +222,21 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
                         String nome = doc.getString("nome");
                         if (nome != null) nomePaciente = nome;
 
-                        // Lê cuidadoresVinculados (novo schema: array ordenado por prioridade)
+                        // Lê array de cuidadores (novo schema)
                         @SuppressWarnings("unchecked")
                         List<String> lista = (List<String>) doc.get("cuidadoresVinculados");
                         if (lista != null) {
                             cuidadoresVinculados = new ArrayList<>(lista);
                         } else {
-                            // Compatibilidade com documentos antigos (campo único)
+                            // Compatibilidade com schema antigo (campo único)
                             String legado = doc.getString("cuidadorVinculado");
                             cuidadoresVinculados = new ArrayList<>();
                             if (legado != null && !legado.isEmpty()) {
                                 cuidadoresVinculados.add(legado);
                             }
                         }
-                        Log.d(TAG, "Cuidadores vinculados: " + cuidadoresVinculados.size());
+                        Log.d(TAG, "Paciente: " + nomePaciente
+                                + " | Cuidadores: " + cuidadoresVinculados.size());
                     }
                     if (!monitorIniciado) { monitorIniciado = true; iniciarMonitor(); }
                 });
@@ -174,6 +245,7 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
     private void iniciarMonitor() {
         if (monitor == null) monitor = new HeartRateMonitor(this, this);
         monitor.iniciar();
+        Log.d(TAG, "Monitor cardíaco iniciado");
     }
 
     private void pararServico() {
@@ -191,6 +263,7 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
 
         long agora = System.currentTimeMillis();
 
+        // Atualiza notificação persistente (throttled — máx 1x a cada 3s)
         if (agora - lastNotifUpdate >= NOTIF_UPDATE_INTERVAL_MS) {
             lastNotifUpdate = agora;
             String st = (monitor != null && bpm >= monitor.getBpmMin()
@@ -198,6 +271,7 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
             notifManager.notify(NOTIF_ID, buildNotification(st, String.valueOf(bpm)));
         }
 
+        // Persiste BPM no Firestore (throttled — máx 1x a cada 5s)
         if (uidPaciente != null && agora - lastFirestoreUpdate >= FIRESTORE_UPDATE_INTERVAL_MS) {
             lastFirestoreUpdate = agora;
             try { FirebaseHelper.atualizarBpm(uidPaciente, bpm); }
@@ -214,19 +288,18 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
 
     @Override
     public void onAnomaly(int bpm, HeartRateMonitor.AnomalyType tipo) {
-        // Repassa para a Activity se estiver aberta
         HeartRateMonitor.Listener act = getActivityListener();
         if (act != null) act.onAnomaly(bpm, tipo);
 
-        // Notificação local no próprio relógio (informa o paciente)
+        // Notificação local no relógio (informa o próprio paciente)
         String tituloLocal = tipo == HeartRateMonitor.AnomalyType.HIGH
                 ? "❤ Freq. cardíaca ALTA" : "💙 Freq. cardíaca BAIXA";
         notifManager.notify(NOTIF_ID + 1,
                 buildAlertNotification(tituloLocal, nomePaciente + ": " + bpm + " bpm"));
 
-        // Sem cuidadores vinculados — alerta só local
+        // Envia alerta ao cuidador via Firestore
         if (cuidadoresVinculados.isEmpty()) {
-            Log.w(TAG, "Sem cuidadores vinculados — alerta local apenas");
+            Log.w(TAG, "Anomalia detectada mas sem cuidadores vinculados — somente alerta local");
             return;
         }
 
@@ -251,24 +324,24 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
                 buildNotification("Calibrado — baseline " + baseline + " bpm", "--"));
     }
 
-    // ==================== Lógica de escalada de alertas ====================
+    // ==================== Escalada de alertas ====================
 
     /**
-     * Envia alerta para o cuidador na posição `indice` de cuidadoresVinculados.
+     * Envia alerta para o cuidador no índice `indice` da lista de prioridade.
      * Após ESCALADA_MS (5 min), verifica se foi confirmado:
-     *   - Se não confirmado E existe próximo cuidador → envia para o próximo.
-     *   - Se confirmado OU não há próximo → cadeia encerrada.
+     *   - Não confirmado + próximo cuidador existe → envia ao próximo
+     *   - Confirmado ou último cuidador → cadeia encerrada
      */
     private void enviarAlertaParaCuidador(int indice, int bpm, String tipo) {
         if (indice >= cuidadoresVinculados.size()) {
-            Log.d(TAG, "Escalada encerrada — sem mais cuidadores no índice " + indice);
+            Log.d(TAG, "Escalada encerrada (sem mais cuidadores no índice " + indice + ")");
             return;
         }
         if (uidPaciente == null) return;
 
         String uidCuidador = cuidadoresVinculados.get(indice);
 
-        // Validação: garante que o UID do cuidador é diferente do UID do paciente
+        // Segurança: nunca envia alerta para o próprio paciente
         if (uidCuidador == null || uidCuidador.isEmpty() || uidCuidador.equals(uidPaciente)) {
             Log.e(TAG, "UID de cuidador inválido no índice " + indice + " — pulando");
             enviarAlertaParaCuidador(indice + 1, bpm, tipo);
@@ -282,31 +355,25 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
                 new FirebaseHelper.Callback<String>() {
                     @Override
                     public void onResult(String alertaId) {
-                        Log.d(TAG, "Alerta [" + indice + "] enviado: " + alertaId);
-
-                        // Agenda verificação daqui a 5 min (só se houver próximo cuidador)
-                        int proximoIndice = indice + 1;
-                        if (proximoIndice < cuidadoresVinculados.size()) {
-                            escaladaHandler.postDelayed(() ->
-                                            verificarEEscalar(alertaId, proximoIndice, bpm, tipo),
+                        Log.d(TAG, "Alerta [" + indice + "] enviado — id: " + alertaId);
+                        // Agenda verificação em 5 min se há próximo cuidador
+                        if (indice + 1 < cuidadoresVinculados.size()) {
+                            escaladaHandler.postDelayed(
+                                    () -> verificarEEscalar(alertaId, indice + 1, bpm, tipo),
                                     ESCALADA_MS);
-                            Log.d(TAG, "Escalada agendada em 5 min para cuidador[" + proximoIndice + "]");
+                            Log.d(TAG, "Escalada agendada para cuidador[" + (indice + 1) + "] em 5 min");
                         }
                     }
-
                     @Override
                     public void onError(Exception e) {
                         Log.e(TAG, "Falha ao enviar alerta [" + indice + "]: " + e.getMessage());
-                        // Tenta o próximo cuidador imediatamente se falhar
+                        // Falha de rede? Tenta o próximo imediatamente
                         enviarAlertaParaCuidador(indice + 1, bpm, tipo);
                     }
                 });
     }
 
-    /**
-     * Verifica no Firestore se o alerta anterior foi confirmado.
-     * Se não foi confirmado, escala para o próximo cuidador.
-     */
+    /** Verifica se o alerta foi confirmado; se não, escala para o próximo cuidador. */
     private void verificarEEscalar(String alertaId, int proximoIndice, int bpm, String tipo) {
         FirebaseHelper.alertaFoiConfirmado(alertaId, new FirebaseHelper.Callback<Boolean>() {
             @Override
@@ -314,15 +381,13 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
                 if (Boolean.TRUE.equals(confirmado)) {
                     Log.d(TAG, "Alerta " + alertaId + " confirmado — escalada cancelada");
                 } else {
-                    Log.d(TAG, "Alerta " + alertaId + " NÃO confirmado após 5 min — escalando para cuidador["
-                            + proximoIndice + "]");
+                    Log.d(TAG, "Alerta " + alertaId + " não confirmado após 5 min → escalando");
                     enviarAlertaParaCuidador(proximoIndice, bpm, tipo);
                 }
             }
-
             @Override
             public void onError(Exception e) {
-                Log.w(TAG, "Erro ao verificar confirmação — escalando por precaução: " + e.getMessage());
+                Log.w(TAG, "Erro ao verificar confirmação — escalando por precaução");
                 enviarAlertaParaCuidador(proximoIndice, bpm, tipo);
             }
         });
@@ -331,8 +396,8 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
     // ==================== Emergência manual ====================
 
     /**
-     * Envia alerta de emergência para TODOS os cuidadores simultaneamente.
-     * Chamado pela PatientActivity (botão SOS).
+     * Acionado pelo botão SOS da PatientActivity.
+     * Envia alerta de EMERGÊNCIA para TODOS os cuidadores simultaneamente (sem escalada).
      */
     public void dispararEmergenciaManual(int bpm) {
         if (uidPaciente == null || cuidadoresVinculados.isEmpty()) return;
@@ -341,14 +406,13 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
             if (uidCuidador == null || uidCuidador.isEmpty()
                     || uidCuidador.equals(uidPaciente)) continue;
 
-            FirebaseHelper.enviarAlerta(uidPaciente, nomePaciente, uidCuidador,
-                    bpm, "MANUAL", 0, new FirebaseHelper.Callback<String>() {
-                        @Override
-                        public void onResult(String id) {
-                            Log.d(TAG, "Emergência manual enviada para: " + uidCuidador);
+            FirebaseHelper.enviarAlerta(uidPaciente, nomePaciente,
+                    uidCuidador, bpm, "MANUAL", 0,
+                    new FirebaseHelper.Callback<String>() {
+                        @Override public void onResult(String id) {
+                            Log.d(TAG, "Emergência enviada para: " + uidCuidador);
                         }
-                        @Override
-                        public void onError(Exception e) {
+                        @Override public void onError(Exception e) {
                             Log.e(TAG, "Falha ao enviar emergência para " + uidCuidador, e);
                         }
                     });
@@ -366,15 +430,22 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
 
     private void criarCanalNotificacao() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            // Canal persistente (baixa prioridade — apenas para manter o serviço visível)
             NotificationChannel canal = new NotificationChannel(
-                    CHANNEL_ID, "Monitoramento EverNear", NotificationManager.IMPORTANCE_LOW);
+                    CHANNEL_ID,
+                    "EverNear — Monitoramento",
+                    NotificationManager.IMPORTANCE_LOW);
             canal.setDescription("Monitoramento contínuo de frequência cardíaca");
             canal.setShowBadge(false);
             notifManager.createNotificationChannel(canal);
 
+            // Canal de alertas (alta prioridade — vibra e aparece na tela do relógio)
             NotificationChannel canalAlerta = new NotificationChannel(
-                    CHANNEL_ID + "_alerta", "Alertas EverNear", NotificationManager.IMPORTANCE_HIGH);
-            canalAlerta.setDescription("Alertas de frequência cardíaca anormal");
+                    CHANNEL_ID + "_alerta",
+                    "Alertas EverNear",
+                    NotificationManager.IMPORTANCE_HIGH);
+            canalAlerta.setDescription("Alertas de frequência cardíaca fora do normal");
+            canalAlerta.enableVibration(true);
             notifManager.createNotificationChannel(canalAlerta);
         }
     }

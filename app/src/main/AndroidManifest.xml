@@ -4,30 +4,50 @@
     <uses-feature android:name="android.hardware.type.watch" android:required="false" />
     <uses-feature android:name="android.hardware.sensor.heartrate" android:required="false" />
 
-    <!-- Sensores e conectividade -->
+    <!-- ── Sensores ─────────────────────────────────────────────────────────── -->
+    <!-- Acesso ao sensor de batimentos cardíacos (foreground) -->
     <uses-permission android:name="android.permission.BODY_SENSORS" />
+    <!-- Acesso ao sensor em segundo plano (exigido pelo Android 13+ / API 33+) -->
+    <uses-permission android:name="android.permission.BODY_SENSORS_BACKGROUND" />
+    <!-- Reconhecimento de atividade física (necessário em alguns Wear OS) -->
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+
+    <!-- ── Rede ──────────────────────────────────────────────────────────────── -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- ── CPU / energia ─────────────────────────────────────────────────────── -->
+    <!--
+        WAKE_LOCK: mantém a CPU ativa mesmo com tela apagada.
+        CRITICAL para monitoramento contínuo — sem isto, o Android suspende o
+        processo e o sensor para de entregar leituras.
+    -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
-    <!-- Serviço em primeiro plano (obrigatório para rodar em segundo plano no Android 9+) -->
+    <!-- ── Serviços em primeiro plano ────────────────────────────────────────── -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <!-- Necessário para targetSdk 34+ com serviço do tipo "health" -->
+    <!-- Tipo "health" (paciente) — obrigatório targetSdk 34+ -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
-    <!-- Necessário para targetSdk 34+ com serviço do tipo "dataSync" (cuidador) -->
+    <!-- Tipo "dataSync" (cuidador) — obrigatório targetSdk 34+ -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
-    <!-- Reiniciar o monitor após reboot do dispositivo -->
+    <!-- ── Boot ──────────────────────────────────────────────────────────────── -->
+    <!-- Reinicia o monitoramento automaticamente após o relógio/celular ligar -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
-    <!-- Notificações (Android 13+ / API 33+) -->
+    <!-- ── Notificações ──────────────────────────────────────────────────────── -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Exibe alerta mesmo com tela bloqueada (como alarme) no celular do cuidador -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
 
-    <!-- Ligar para o paciente a partir da tela do cuidador -->
+    <!-- ── Chamada telefônica ─────────────────────────────────────────────────── -->
     <uses-permission android:name="android.permission.CALL_PHONE" />
 
+    <!-- ── Notificação na tela de bloqueio ────────────────────────────────────── -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
     <application
+        android:name=".EverNearApplication"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
@@ -76,9 +96,10 @@
             android:theme="@style/Theme.AppCompat.DayNight.NoActionBar" />
 
         <!--
-            Serviço de monitoramento em segundo plano (PACIENTE — smartwatch).
-            foregroundServiceType="health" identifica o propósito para o Android (API 34+).
-            START_STICKY garante reinício automático se o sistema encerrar o processo.
+            Serviço de monitoramento contínuo de batimentos cardíacos (PACIENTE — smartwatch).
+            • foregroundServiceType="health" — identifica propósito para Android 14+ (API 34+)
+            • START_STICKY — Android reinicia se encerrar o processo
+            • WakeLock (adquirido internamente) — mantém CPU ativa mesmo com tela apagada
         -->
         <service
             android:name=".HeartRateService"
@@ -86,9 +107,9 @@
             android:foregroundServiceType="health" />
 
         <!--
-            Serviço de recebimento de alertas em segundo plano (CUIDADOR — celular).
-            Mantém listener Firestore ativo e exibe notificações de alta prioridade
-            mesmo quando o app está fechado.
+            Serviço de recebimento de alertas (CUIDADOR — celular/tablet).
+            • Mantém snapshot listener do Firestore ativo com app fechado
+            • Exibe notificação de alta prioridade (com tela de bloqueio) ao receber alerta
         -->
         <service
             android:name=".CaregiverAlertService"
@@ -96,8 +117,9 @@
             android:foregroundServiceType="dataSync" />
 
         <!--
-            Receptor de boot: reinicia o serviço quando o relógio/celular é ligado.
-            QUICKBOOT_POWERON cobre alguns fabricantes (ex: HTC/Huawei).
+            Receptor de boot — reinicia o serviço correto quando o dispositivo é ligado.
+            directBootAware="false": aguarda o desencriptamento do armazenamento (padrão seguro).
+            Cobre reinicializações normais e reboots rápidos de alguns fabricantes (Huawei/HTC).
         -->
         <receiver
             android:name=".BootReceiver"
@@ -105,6 +127,8 @@
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <!-- Samsung / outros fabricantes -->
+                <action android:name="com.sec.android.intent.action.LAUNCH_DATA_SETTINGS" />
             </intent-filter>
         </receiver>
 
