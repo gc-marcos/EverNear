@@ -240,6 +240,10 @@ public class LoginActivity extends AppCompatActivity {
         if ("patient".equals(tipo) || "paciente".equals(tipo)) {
             startActivity(new Intent(LoginActivity.this, PatientActivity.class));
         } else {
+            // Pede isenção de bateria logo no primeiro login do cuidador
+            // (antes de abrir a CaregiverActivity), garantindo que o serviço
+            // de alertas funcione mesmo com o app completamente fechado.
+            PermissaoHelper.solicitarIsencaoBateria(LoginActivity.this);
             startActivity(new Intent(LoginActivity.this, CaregiverActivity.class));
         }
         finish();

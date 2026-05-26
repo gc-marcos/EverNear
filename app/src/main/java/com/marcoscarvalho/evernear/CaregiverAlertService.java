@@ -9,6 +9,9 @@ import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.media.AudioAttributes;
+import android.media.RingtoneManager;
+import android.net.Uri;
 import android.os.Build;
 import android.os.IBinder;
 import android.os.SystemClock;
@@ -203,6 +206,7 @@ public class CaregiverAlertService extends Service {
 
     private void criarCanais() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            // Canal do foreground service: silencioso, apenas mantém o serviço visível
             NotificationChannel fg = new NotificationChannel(
                     CHANNEL_ID_FG,
                     "EverNear — Monitor Cuidador",
@@ -211,15 +215,32 @@ public class CaregiverAlertService extends Service {
             fg.setShowBadge(false);
             notifManager.createNotificationChannel(fg);
 
+            // Canal de alertas: máxima prioridade
+            // Som de alarme + vibração + LED + visível na tela de bloqueio
+            Uri somAlarme = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
+            if (somAlarme == null) {
+                // Fallback: toca som de notificação padrão se não houver alarme configurado
+                somAlarme = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
+            }
+
+            AudioAttributes audioAttr = new AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ALARM)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build();
+
             NotificationChannel alrt = new NotificationChannel(
                     CHANNEL_ID_ALRT,
                     "Alertas do Paciente",
                     NotificationManager.IMPORTANCE_HIGH);
             alrt.setDescription("Notificações de emergência e batimentos fora do normal");
             alrt.enableVibration(true);
+            alrt.setVibrationPattern(new long[]{0, 500, 200, 500, 200, 500});
             alrt.enableLights(true);
             alrt.setLightColor(0xFFFF0000);
             alrt.setBypassDnd(true);
+            alrt.setSound(somAlarme, audioAttr);
+            // Exibe conteúdo completo da notificação na tela de bloqueio (sem ocultar)
+            alrt.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
             notifManager.createNotificationChannel(alrt);
         }
     }
@@ -266,6 +287,12 @@ public class CaregiverAlertService extends Service {
                 this, alertaId.hashCode(), openApp,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
+        // Som de alarme para todos os alertas (não só emergências)
+        Uri somAlarme = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
+        if (somAlarme == null) {
+            somAlarme = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
+        }
+
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID_ALRT)
                 .setSmallIcon(R.drawable.ic_heart_heartbeat)
                 .setContentTitle(emoji + " " + titulo)
@@ -278,12 +305,18 @@ public class CaregiverAlertService extends Service {
                 .setAutoCancel(true)
                 .setPriority(NotificationCompat.PRIORITY_MAX)
                 .setCategory(NotificationCompat.CATEGORY_ALARM)
-                .setDefaults(NotificationCompat.DEFAULT_ALL);
+                // Exibe conteúdo completo na tela de bloqueio (sem ocultar nome/BPM)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                // Som de alarme explícito (garante som mesmo em dispositivos que ignoram o canal)
+                .setSound(somAlarme)
+                // Vibração padrão + toque + LED
+                .setDefaults(NotificationCompat.DEFAULT_VIBRATE | NotificationCompat.DEFAULT_LIGHTS)
+                // Full-screen intent: todos os alertas aparecem sobre a tela de bloqueio
+                // isHighPriority=true para emergências (abre sem interação); false para BPM
+                .setFullScreenIntent(piAbrir, isEmergencia);
 
-        // Emergências: full-screen intent (aparece sobre a tela de bloqueio como alarme)
         if (isEmergencia) {
-            builder.setFullScreenIntent(piAbrir, true);
-            builder.setOngoing(true);
+            builder.setOngoing(true); // não pode ser dispensada sem tocar no app
         }
 
         notifManager.notify(NOTIF_ID_ALERT + alertaId.hashCode(), builder.build());
