@@ -7,6 +7,7 @@ import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.os.Build;
 import android.os.Bundle;
+import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -16,25 +17,24 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
-import com.google.firebase.auth.FirebaseAuth;
-
 /**
  * Tela principal do paciente no smartwatch.
  *
- * O monitoramento e o envio de alertas são feitos pelo HeartRateService
- * (processo em segundo plano com WakeLock). Esta Activity:
+ * O monitoramento contínuo e o envio de alertas são feitos pelo HeartRateService
+ * (foreground service com WakeLock + HandlerThread dedicado). Esta Activity:
  *  - Exibe BPM em tempo real via listener estático do serviço
- *  - Gerencia as permissões necessárias para sensores em background
+ *  - Gerencia permissões de sensor
  *  - Aciona calibração e emergência manual via serviço
  *
- * Permissões necessárias (todas solicitadas em cadeia no onResume):
- *  - BODY_SENSORS         → leitura em foreground
- *  - BODY_SENSORS_BACKGROUND → leitura em background (Android 13+ / API 33+)
- *  - POST_NOTIFICATIONS   → exibir notificações (Android 13+ / API 33+)
+ * ── Calibração e tela acesa ──────────────────────────────────────────────────
+ * Durante a calibração (~30 leituras × 3 s = ~90 s), a tela é mantida acesa
+ * com FLAG_KEEP_SCREEN_ON. Isso:
+ *  1. Evita que o timeout de inatividade apague a tela no meio da calibração.
+ *  2. Garante que o sensor de hardware continue entregando leituras (em alguns
+ *     modelos Wear OS, o sensor é suspenso quando a tela apaga).
+ * A flag é removida assim que a calibração termina ou a Activity sai da tela.
  */
 public class PatientActivity extends AppCompatActivity implements HeartRateMonitor.Listener {
-
-    private static final String TAG = "PatientActivity";
 
     private static final int REQ_BODY_SENSORS            = 1001;
     private static final int REQ_BODY_SENSORS_BACKGROUND = 1002;
@@ -42,6 +42,9 @@ public class PatientActivity extends AppCompatActivity implements HeartRateMonit
 
     private TextView tvBpmValue, tvStatus, tvLimites;
     private Button   btnEmergency, btnVerCodigo, btnCalibrar;
+
+    // Controla se a tela deve ficar acesa (apenas durante calibração)
+    private boolean telaAcesaParaCalibracao = false;
 
     // ==================== Ciclo de vida ====================
 
@@ -60,16 +63,9 @@ public class PatientActivity extends AppCompatActivity implements HeartRateMonit
         btnVerCodigo.setOnClickListener(v ->
                 startActivity(new Intent(this, DashboardPacienteActivity.class)));
 
-        // Emergência manual: delega ao serviço (que conhece todos os cuidadores vinculados)
         btnEmergency.setOnClickListener(v -> dispararEmergenciaManual());
 
-        // Calibração: sinaliza o serviço via Intent-action
-        btnCalibrar.setOnClickListener(v -> {
-            Intent intent = new Intent(this, HeartRateService.class);
-            intent.setAction(HeartRateService.ACTION_CALIBRAR);
-            ContextCompat.startForegroundService(this, intent);
-            Toast.makeText(this, "Calibração iniciada — fique em repouso", Toast.LENGTH_LONG).show();
-        });
+        btnCalibrar.setOnClickListener(v -> iniciarCalibracao());
 
         atualizarLimitesUI();
     }
@@ -77,40 +73,71 @@ public class PatientActivity extends AppCompatActivity implements HeartRateMonit
     @Override
     protected void onResume() {
         super.onResume();
-        // Registra esta Activity para receber atualizações em tempo real do serviço
         HeartRateService.setActivityListener(this);
-        // Solicita permissões em cadeia ao aparecer na tela
         verificarPermissoes();
+
+        // Se a Activity voltou ao primeiro plano durante uma calibração em andamento,
+        // mantém a tela acesa para não interromper
+        HeartRateService svc = HeartRateService.getInstance();
+        if (svc != null && svc.getMonitor() != null && svc.getMonitor().isCalibrating()) {
+            manterTelaAcesa(true);
+        }
     }
 
     @Override
     protected void onPause() {
         super.onPause();
-        // Remove o listener — o serviço continua em background sem custo de UI
         HeartRateService.setActivityListener(null);
+        // Remove a flag ao sair da tela — o serviço continua calibrando em background
+        manterTelaAcesa(false);
+    }
+
+    // ==================== Calibração ====================
+
+    private void iniciarCalibracao() {
+        // Mantém tela acesa durante a calibração (evita que o timeout de inatividade
+        // apague a tela e, em alguns dispositivos, suspenda o sensor)
+        manterTelaAcesa(true);
+
+        Intent intent = new Intent(this, HeartRateService.class);
+        intent.setAction(HeartRateService.ACTION_CALIBRAR);
+        ContextCompat.startForegroundService(this, intent);
+
+        btnCalibrar.setEnabled(false);
+        btnCalibrar.setAlpha(0.5f);
+        tvStatus.setText("Calibrando — fique em repouso...");
+        tvStatus.setTextColor(Color.parseColor("#FFC107"));
+
+        Toast.makeText(this,
+                "Calibração iniciada — mantenha o relógio no pulso e fique em repouso",
+                Toast.LENGTH_LONG).show();
+    }
+
+    /**
+     * Liga/desliga o FLAG_KEEP_SCREEN_ON na janela desta Activity.
+     * Quando ligado: o Android não apaga a tela por timeout enquanto a Activity estiver visível.
+     * Quando desligado: comportamento normal retorna.
+     */
+    private void manterTelaAcesa(boolean manter) {
+        if (manter == telaAcesaParaCalibracao) return; // evita chamadas redundantes
+        telaAcesaParaCalibracao = manter;
+
+        if (manter) {
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        } else {
+            getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        }
     }
 
     // ==================== Fluxo de permissões ====================
 
-    /**
-     * Cadeia de permissões:
-     *  1. BODY_SENSORS (sensor em foreground)
-     *  2. BODY_SENSORS_BACKGROUND (sensor em background — Android 13+ / API 33+)
-     *  3. POST_NOTIFICATIONS (notificações — Android 13+ / API 33+)
-     *  4. iniciarServico()
-     *
-     * Cada etapa só avança quando a anterior é concedida ou já estava concedida.
-     */
     private void verificarPermissoes() {
-        // Etapa 1: BODY_SENSORS
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.BODY_SENSORS)
                 != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this,
                     new String[]{Manifest.permission.BODY_SENSORS}, REQ_BODY_SENSORS);
             return;
         }
-
-        // Etapa 2: BODY_SENSORS_BACKGROUND (apenas API 33+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.BODY_SENSORS_BACKGROUND)
                     != PackageManager.PERMISSION_GRANTED) {
@@ -120,8 +147,6 @@ public class PatientActivity extends AppCompatActivity implements HeartRateMonit
                 return;
             }
         }
-
-        // Etapa 3: POST_NOTIFICATIONS (apenas API 33+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
                     != PackageManager.PERMISSION_GRANTED) {
@@ -131,8 +156,6 @@ public class PatientActivity extends AppCompatActivity implements HeartRateMonit
                 return;
             }
         }
-
-        // Todas as permissões concedidas → inicia o serviço
         iniciarServico();
     }
 
@@ -140,28 +163,22 @@ public class PatientActivity extends AppCompatActivity implements HeartRateMonit
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
                                             @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-
         switch (requestCode) {
             case REQ_BODY_SENSORS:
                 if (grantResults.length == 0
                         || grantResults[0] != PackageManager.PERMISSION_GRANTED) {
-                    tvStatus.setText("Permissão de sensor negada — usando simulador de BPM");
+                    tvStatus.setText("Permissão negada — usando simulador");
                 }
-                // Avança para próxima permissão independentemente do resultado
                 verificarPermissoes();
                 break;
-
             case REQ_BODY_SENSORS_BACKGROUND:
                 if (grantResults.length == 0
                         || grantResults[0] != PackageManager.PERMISSION_GRANTED) {
-                    // Sensor continuará funcionando em foreground; background pode falhar em API 33+
-                    tvStatus.setText("Sensor ativo (apenas enquanto app estiver aberto)");
+                    tvStatus.setText("Sensor ativo (somente com tela aberta)");
                 }
                 verificarPermissoes();
                 break;
-
             case REQ_POST_NOTIFICATIONS:
-                // Segue mesmo sem a permissão (o serviço funciona, mas sem notificações)
                 iniciarServico();
                 break;
         }
@@ -172,7 +189,7 @@ public class PatientActivity extends AppCompatActivity implements HeartRateMonit
         atualizarLimitesUI();
     }
 
-    // ==================== Callbacks do HeartRateMonitor (via Serviço) ====================
+    // ==================== Callbacks do HeartRateMonitor ====================
 
     @Override
     public void onHeartRate(int bpm) {
@@ -192,7 +209,6 @@ public class PatientActivity extends AppCompatActivity implements HeartRateMonit
 
     @Override
     public void onAnomaly(int bpm, HeartRateMonitor.AnomalyType tipo) {
-        // Apenas feedback local na UI; o envio ao Firebase é feito pelo HeartRateService
         runOnUiThread(() -> {
             String msg = tipo == HeartRateMonitor.AnomalyType.HIGH
                     ? "Frequência ALTA: " + bpm + " bpm"
@@ -206,18 +222,27 @@ public class PatientActivity extends AppCompatActivity implements HeartRateMonit
         runOnUiThread(() -> {
             tvStatus.setText("Calibrando... " + collected + "/" + total);
             tvStatus.setTextColor(Color.parseColor("#FFC107"));
+            // Garante que a tela continua acesa durante cada leitura de calibração
+            manterTelaAcesa(true);
         });
     }
 
     @Override
     public void onCalibrationComplete(int baseline, int min, int max) {
         runOnUiThread(() -> {
+            // Calibração concluída: libera a tela para o comportamento normal de timeout
+            manterTelaAcesa(false);
+            btnCalibrar.setEnabled(true);
+            btnCalibrar.setAlpha(1f);
+
             tvStatus.setText("Calibrado — baseline " + baseline + " bpm");
             tvStatus.setTextColor(Color.parseColor("#4CAF50"));
             atualizarLimitesUI();
+
             Toast.makeText(this,
-                    "Calibração concluída!\nBaseline: " + baseline
-                            + " | Intervalo: " + min + "–" + max + " bpm",
+                    "Calibração concluída!\n"
+                    + "Baseline: " + baseline + " bpm\n"
+                    + "Intervalo normal: " + min + "–" + max + " bpm",
                     Toast.LENGTH_LONG).show();
         });
     }
@@ -231,10 +256,10 @@ public class PatientActivity extends AppCompatActivity implements HeartRateMonit
                     + svc.getMonitor().getBpmMin() + "–"
                     + svc.getMonitor().getBpmMax() + " bpm");
         } else {
-            SharedPreferences prefs = getSharedPreferences("heart_rate_prefs", MODE_PRIVATE);
-            int min = prefs.getInt("bpm_min", 50);
-            int max = prefs.getInt("bpm_max", 120);
-            tvLimites.setText("Limites: " + min + "–" + max + " bpm");
+            SharedPreferences p = getSharedPreferences("heart_rate_prefs", MODE_PRIVATE);
+            tvLimites.setText("Limites: "
+                    + p.getInt("bpm_min", 50) + "–"
+                    + p.getInt("bpm_max", 120) + " bpm");
         }
     }
 
@@ -263,17 +288,14 @@ public class PatientActivity extends AppCompatActivity implements HeartRateMonit
     private void dispararEmergenciaManual() {
         HeartRateService svc = HeartRateService.getInstance();
         if (svc == null || svc.getCuidadoresVinculados().isEmpty()) {
-            Toast.makeText(this,
-                    "Vincule-se a um cuidador primeiro",
+            Toast.makeText(this, "Vincule-se a um cuidador primeiro",
                     Toast.LENGTH_SHORT).show();
             return;
         }
-
         int bpmAtual = 0;
         try { bpmAtual = Integer.parseInt(tvBpmValue.getText().toString()); }
         catch (NumberFormatException ignored) {}
 
-        // O serviço envia para TODOS os cuidadores simultaneamente
         svc.dispararEmergenciaManual(bpmAtual);
         Toast.makeText(this, "Alerta de emergência enviado!", Toast.LENGTH_LONG).show();
     }

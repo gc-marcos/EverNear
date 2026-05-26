@@ -83,7 +83,7 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
     private long lastNotifUpdate     = 0;
     private long lastFirestoreUpdate = 0;
     private static final long NOTIF_UPDATE_INTERVAL_MS     = 3_000L;
-    private static final long FIRESTORE_UPDATE_INTERVAL_MS = 5_000L;
+    private static final long FIRESTORE_UPDATE_INTERVAL_MS = 3_000L; // 3 s para testes
 
     // ==================== API estática ====================
 
