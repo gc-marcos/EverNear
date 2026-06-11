@@ -8,7 +8,6 @@
     android:gravity="center_horizontal"
     android:padding="24dp">
 
-    <!-- Cabeçalho -->
     <TextView
         android:id="@+id/tv_titulo"
         android:layout_width="wrap_content"
@@ -24,11 +23,10 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="4dp"
-        android:text="Passo 1 de 4"
+        android:text="Passo 1"
         android:textColor="#6B8096"
         android:textSize="13sp" />
 
-    <!-- Barra de progresso -->
     <ProgressBar
         android:id="@+id/progress_bar"
         style="?android:attr/progressBarStyleHorizontal"
@@ -37,26 +35,25 @@
         android:layout_marginTop="16dp"
         android:progressDrawable="@drawable/progress_bar_permissao"
         android:max="100"
-        android:progress="25" />
+        android:progress="33" />
 
-    <!-- Card da permissão atual -->
+    <!-- Área central com ícone e descrição -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
         android:orientation="vertical"
-        android:gravity="center"
-        android:paddingTop="16dp">
+        android:gravity="center">
 
         <TextView
             android:id="@+id/tv_icone"
-            android:layout_width="80dp"
-            android:layout_height="80dp"
+            android:layout_width="88dp"
+            android:layout_height="88dp"
             android:gravity="center"
             android:text="🫀"
-            android:textSize="44sp"
+            android:textSize="46sp"
             android:background="@drawable/circle_bg_permissao"
-            android:layout_marginBottom="24dp" />
+            android:layout_marginBottom="28dp" />
 
         <TextView
             android:id="@+id/tv_nome_permissao"
@@ -64,7 +61,7 @@
             android:layout_height="wrap_content"
             android:text="Sensor de frequência cardíaca"
             android:textColor="#FFFFFF"
-            android:textSize="18sp"
+            android:textSize="19sp"
             android:textStyle="bold"
             android:gravity="center"
             android:layout_marginBottom="16dp" />
@@ -73,43 +70,32 @@
             android:id="@+id/tv_descricao"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Permite monitorar seus batimentos cardíacos continuamente, mesmo com a tela apagada."
+            android:text="Permite monitorar seus batimentos mesmo com a tela apagada."
             android:textColor="#B0BEC5"
             android:textSize="15sp"
             android:gravity="center"
-            android:lineSpacingMultiplier="1.4"
+            android:lineSpacingMultiplier="1.5"
             android:paddingHorizontal="8dp" />
-
-        <TextView
-            android:id="@+id/tv_instrucao"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:text="Na próxima tela, toque em «Permitir»."
-            android:textColor="#4CAF50"
-            android:textSize="14sp"
-            android:gravity="center"
-            android:visibility="gone" />
 
     </LinearLayout>
 
-    <!-- Botões -->
+    <!-- Botão principal: abre DIRETAMENTE o diálogo do sistema -->
     <Button
         android:id="@+id/btn_permitir"
         android:layout_width="match_parent"
         android:layout_height="52dp"
-        android:text="Permitir e continuar"
+        android:text="Abrir configurações"
         android:textColor="#FFFFFF"
         android:textSize="15sp"
         android:textStyle="bold"
-        android:background="@drawable/btn_red_rounded"
+        android:background="@drawable/btn_login_primary"
         android:layout_marginBottom="12dp" />
 
     <Button
         android:id="@+id/btn_pular"
         android:layout_width="match_parent"
         android:layout_height="44dp"
-        android:text="Pular por agora"
+        android:text="Pular esta permissão"
         android:textColor="#6B8096"
         android:textSize="14sp"
         android:background="@android:color/transparent"

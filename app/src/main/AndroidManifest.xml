@@ -72,6 +72,17 @@
             android:theme="@style/Theme.AppCompat.DayNight.NoActionBar"
             android:windowSoftInputMode="adjustResize" />
 
+        <!--
+            Tela de configuração inicial de permissões.
+            Exibida UMA VEZ após o primeiro login/cadastro, antes de entrar no app.
+            Solicita todas as permissões necessárias abrindo diretamente os
+            diálogos do sistema (sem telas intermediárias do nosso app).
+        -->
+        <activity
+            android:name=".SetupPermissoesActivity"
+            android:exported="false"
+            android:theme="@style/Theme.AppCompat.DayNight.NoActionBar" />
+
         <!-- Tela principal do paciente (monitor cardíaco) -->
         <activity
             android:name=".PatientActivity"

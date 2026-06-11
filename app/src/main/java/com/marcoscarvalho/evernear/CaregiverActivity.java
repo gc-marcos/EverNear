@@ -6,10 +6,7 @@ import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
-import android.os.Build;
 import android.os.Bundle;
-import android.os.PowerManager;
-import android.provider.Settings;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
@@ -86,11 +83,9 @@ public class CaregiverActivity extends AppCompatActivity {
         if (btnCall != null) btnCall.setOnClickListener(v -> ligarParaPaciente());
 
         // Inicia o serviço de alertas em segundo plano
+        // (permissões e isenção de bateria já foram solicitadas em SetupPermissoesActivity)
         ContextCompat.startForegroundService(this,
                 new Intent(this, CaregiverAlertService.class));
-
-        // Solicita isenção de otimização de bateria para garantir recebimento de alertas
-        solicitarIsencaoBateria();
 
         carregarDadosCuidador();
         ouvirAlertasComApp();
@@ -102,44 +97,6 @@ public class CaregiverActivity extends AppCompatActivity {
         if (cuidadorListener != null) cuidadorListener.remove();
         if (pacienteListener  != null) pacienteListener.remove();
         if (alertasListener   != null) alertasListener.remove();
-    }
-
-    // ==================== Isenção de otimização de bateria ====================
-
-    /**
-     * Solicita ao usuário que isente o app da otimização de bateria do Android.
-     * Sem isso, o sistema pode suspender o CaregiverAlertService agressivamente,
-     * especialmente em fabricantes como Samsung, Huawei e Xiaomi.
-     *
-     * A isenção é solicitada apenas uma vez (se ainda não concedida).
-     */
-    private void solicitarIsencaoBateria() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return;
-
-        PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
-        if (pm == null) return;
-
-        String packageName = getPackageName();
-        if (pm.isIgnoringBatteryOptimizations(packageName)) return; // já isento
-
-        new AlertDialog.Builder(this)
-                .setTitle("Permitir recebimento de alertas")
-                .setMessage("Para receber alertas do paciente mesmo com o app fechado, "
-                        + "o EverNear precisa ser excluído da otimização de bateria.\n\n"
-                        + "Toque em \"Permitir\" e selecione \"Não otimizar\".")
-                .setCancelable(false)
-                .setPositiveButton("Permitir", (dialog, which) -> {
-                    Intent intent = new Intent(
-                            Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-                            Uri.parse("package:" + packageName));
-                    try { startActivity(intent); }
-                    catch (Exception e) {
-                        // Fallback: abre a tela de configuração geral de bateria
-                        startActivity(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
-                    }
-                })
-                .setNegativeButton("Agora não", null)
-                .show();
     }
 
     // ==================== Carregamento dos pacientes vinculados ====================

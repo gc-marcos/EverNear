@@ -235,17 +235,21 @@ public class LoginActivity extends AppCompatActivity {
 
     // ==================== Navegação ====================
 
-    /** Paciente → PatientActivity | Cuidador → CaregiverActivity */
+    /**
+     * Após login/cadastro bem-sucedido, vai para SetupPermissoesActivity.
+     *
+     * A tela de setup percorre todas as permissões necessárias para o papel
+     * do usuário, abrindo DIRETAMENTE os diálogos do sistema Android (sem
+     * telas intermediárias). Ao concluir, navega para PatientActivity ou
+     * CaregiverActivity conforme o papel.
+     */
     private void direcionarAposLogin(String tipo) {
-        if ("patient".equals(tipo) || "paciente".equals(tipo)) {
-            startActivity(new Intent(LoginActivity.this, PatientActivity.class));
-        } else {
-            // Pede isenção de bateria logo no primeiro login do cuidador
-            // (antes de abrir a CaregiverActivity), garantindo que o serviço
-            // de alertas funcione mesmo com o app completamente fechado.
-            PermissaoHelper.solicitarIsencaoBateria(LoginActivity.this);
-            startActivity(new Intent(LoginActivity.this, CaregiverActivity.class));
-        }
+        Intent setup = new Intent(LoginActivity.this, SetupPermissoesActivity.class);
+        setup.putExtra("userType", tipo);
+        // FLAG_ACTIVITY_CLEAR_TASK: remove LoginActivity da pilha de navegação
+        // para que o botão Voltar não retorne à tela de login após o setup
+        setup.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+        startActivity(setup);
         finish();
     }
 }

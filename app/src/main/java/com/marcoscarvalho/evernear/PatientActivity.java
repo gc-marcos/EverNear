@@ -1,20 +1,15 @@
 package com.marcoscarvalho.evernear;
 
-import android.Manifest;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.content.pm.PackageManager;
 import android.graphics.Color;
-import android.os.Build;
 import android.os.Bundle;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
 /**
@@ -35,10 +30,6 @@ import androidx.core.content.ContextCompat;
  * A flag é removida assim que a calibração termina ou a Activity sai da tela.
  */
 public class PatientActivity extends AppCompatActivity implements HeartRateMonitor.Listener {
-
-    private static final int REQ_BODY_SENSORS            = 1001;
-    private static final int REQ_BODY_SENSORS_BACKGROUND = 1002;
-    private static final int REQ_POST_NOTIFICATIONS      = 1003;
 
     private TextView tvBpmValue, tvStatus, tvLimites;
     private Button   btnEmergency, btnVerCodigo, btnCalibrar;
@@ -74,10 +65,10 @@ public class PatientActivity extends AppCompatActivity implements HeartRateMonit
     protected void onResume() {
         super.onResume();
         HeartRateService.setActivityListener(this);
-        verificarPermissoes();
+        // Permissões já foram solicitadas em SetupPermissoesActivity — inicia o serviço diretamente
+        iniciarServico();
 
-        // Se a Activity voltou ao primeiro plano durante uma calibração em andamento,
-        // mantém a tela acesa para não interromper
+        // Se voltou ao primeiro plano durante calibração, mantém tela acesa
         HeartRateService svc = HeartRateService.getInstance();
         if (svc != null && svc.getMonitor() != null && svc.getMonitor().isCalibrating()) {
             manterTelaAcesa(true);
@@ -129,60 +120,7 @@ public class PatientActivity extends AppCompatActivity implements HeartRateMonit
         }
     }
 
-    // ==================== Fluxo de permissões ====================
-
-    private void verificarPermissoes() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.BODY_SENSORS)
-                != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this,
-                    new String[]{Manifest.permission.BODY_SENSORS}, REQ_BODY_SENSORS);
-            return;
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BODY_SENSORS_BACKGROUND)
-                    != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(this,
-                        new String[]{Manifest.permission.BODY_SENSORS_BACKGROUND},
-                        REQ_BODY_SENSORS_BACKGROUND);
-                return;
-            }
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
-                    != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(this,
-                        new String[]{Manifest.permission.POST_NOTIFICATIONS},
-                        REQ_POST_NOTIFICATIONS);
-                return;
-            }
-        }
-        iniciarServico();
-    }
-
-    @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
-                                            @NonNull int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        switch (requestCode) {
-            case REQ_BODY_SENSORS:
-                if (grantResults.length == 0
-                        || grantResults[0] != PackageManager.PERMISSION_GRANTED) {
-                    tvStatus.setText("Permissão negada — usando simulador");
-                }
-                verificarPermissoes();
-                break;
-            case REQ_BODY_SENSORS_BACKGROUND:
-                if (grantResults.length == 0
-                        || grantResults[0] != PackageManager.PERMISSION_GRANTED) {
-                    tvStatus.setText("Sensor ativo (somente com tela aberta)");
-                }
-                verificarPermissoes();
-                break;
-            case REQ_POST_NOTIFICATIONS:
-                iniciarServico();
-                break;
-        }
-    }
+    // ==================== Serviço ====================
 
     private void iniciarServico() {
         ContextCompat.startForegroundService(this, new Intent(this, HeartRateService.class));
