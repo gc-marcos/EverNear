@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#0D1B2A"
+    android:gravity="center_horizontal"
+    android:padding="24dp">
+
+    <!-- Cabeçalho -->
+    <TextView
+        android:id="@+id/tv_titulo"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="32dp"
+        android:text="Configurar EverNear"
+        android:textColor="#FFFFFF"
+        android:textSize="22sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/tv_passo"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text="Passo 1 de 4"
+        android:textColor="#6B8096"
+        android:textSize="13sp" />
+
+    <!-- Barra de progresso -->
+    <ProgressBar
+        android:id="@+id/progress_bar"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="6dp"
+        android:layout_marginTop="16dp"
+        android:progressDrawable="@drawable/progress_bar_permissao"
+        android:max="100"
+        android:progress="25" />
+
+    <!-- Card da permissão atual -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:paddingTop="16dp">
+
+        <TextView
+            android:id="@+id/tv_icone"
+            android:layout_width="80dp"
+            android:layout_height="80dp"
+            android:gravity="center"
+            android:text="🫀"
+            android:textSize="44sp"
+            android:background="@drawable/circle_bg_permissao"
+            android:layout_marginBottom="24dp" />
+
+        <TextView
+            android:id="@+id/tv_nome_permissao"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Sensor de frequência cardíaca"
+            android:textColor="#FFFFFF"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:gravity="center"
+            android:layout_marginBottom="16dp" />
+
+        <TextView
+            android:id="@+id/tv_descricao"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Permite monitorar seus batimentos cardíacos continuamente, mesmo com a tela apagada."
+            android:textColor="#B0BEC5"
+            android:textSize="15sp"
+            android:gravity="center"
+            android:lineSpacingMultiplier="1.4"
+            android:paddingHorizontal="8dp" />
+
+        <TextView
+            android:id="@+id/tv_instrucao"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="Na próxima tela, toque em «Permitir»."
+            android:textColor="#4CAF50"
+            android:textSize="14sp"
+            android:gravity="center"
+            android:visibility="gone" />
+
+    </LinearLayout>
+
+    <!-- Botões -->
+    <Button
+        android:id="@+id/btn_permitir"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:text="Permitir e continuar"
+        android:textColor="#FFFFFF"
+        android:textSize="15sp"
+        android:textStyle="bold"
+        android:background="@drawable/btn_red_rounded"
+        android:layout_marginBottom="12dp" />
+
+    <Button
+        android:id="@+id/btn_pular"
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:text="Pular por agora"
+        android:textColor="#6B8096"
+        android:textSize="14sp"
+        android:background="@android:color/transparent"
+        android:layout_marginBottom="16dp" />
+
+</LinearLayout>
