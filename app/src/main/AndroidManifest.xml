@@ -102,10 +102,16 @@
             android:exported="false"
             android:theme="@style/Theme.AppCompat.DayNight.NoActionBar" />
 
-        <!-- Tela do cuidador -->
+        <!--
+            Tela do cuidador.
+            launchMode="singleTop": quando o cuidador clica em uma notificação de alerta
+            com o app já aberto, o Android NÃO cria uma nova instância — chama onNewIntent()
+            na instância existente. Isso permite trocar o paciente exibido sem duplicar a tela.
+        -->
         <activity
             android:name=".CaregiverActivity"
             android:exported="false"
+            android:launchMode="singleTop"
             android:theme="@style/Theme.AppCompat.DayNight.NoActionBar" />
 
         <!-- Dashboard do cuidador: vincular paciente -->
@@ -134,11 +140,15 @@
             Serviço de recebimento de alertas (CUIDADOR — celular/tablet).
             • Mantém snapshot listener do Firestore ativo com app fechado
             • Exibe notificação de alta prioridade (com tela de bloqueio) ao receber alerta
+            • stopWithTask="false" — CRÍTICO: sem este atributo, o Android encerra o serviço
+              automaticamente quando o cuidador fecha o app, interrompendo o listener do
+              Firestore e tornando impossível receber alertas com o app fechado.
         -->
         <service
             android:name=".CaregiverAlertService"
             android:exported="false"
-            android:foregroundServiceType="dataSync" />
+            android:foregroundServiceType="dataSync"
+            android:stopWithTask="false" />
 
         <!--
             Receptor de boot — reinicia o serviço correto quando o dispositivo é ligado.

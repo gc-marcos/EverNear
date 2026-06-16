@@ -55,6 +55,13 @@ public class CaregiverActivity extends AppCompatActivity {
     // Alertas já exibidos nesta sessão (em memória — evita duplicata enquanto a tela está aberta)
     private final java.util.Set<String> alertasExibidos = new java.util.HashSet<>();
 
+    /**
+     * UID do paciente vindo da notificação de alerta.
+     * Se não nulo, a tela abre diretamente na ficha deste paciente ao invés
+     * do primeiro da lista. Atualizado também em onNewIntent (singleTop).
+     */
+    private String uidPacienteDoAlerta;
+
     // ==================== Ciclo de vida ====================
 
     @Override
@@ -70,6 +77,9 @@ public class CaregiverActivity extends AppCompatActivity {
 
         db = FirebaseFirestore.getInstance();
         uidCuidador = FirebaseAuth.getInstance().getUid();
+
+        // Lê pacienteId passado pela notificação de alerta (pode ser null se aberto normalmente)
+        uidPacienteDoAlerta = getIntent().getStringExtra("pacienteId");
 
         View ivBack = findViewById(R.id.iv_back);
         if (ivBack != null) ivBack.setOnClickListener(v -> finish());
@@ -89,6 +99,33 @@ public class CaregiverActivity extends AppCompatActivity {
 
         carregarDadosCuidador();
         ouvirAlertasComApp();
+    }
+
+    /**
+     * Chamado quando o cuidador clica em uma notificação com o app já aberto
+     * (graças ao launchMode="singleTop" no Manifest).
+     *
+     * Troca o paciente exibido para o que disparou o alerta — sem criar
+     * uma nova instância da Activity nem perder o estado atual.
+     */
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+
+        String novoPacienteId = intent.getStringExtra("pacienteId");
+        if (novoPacienteId != null && !novoPacienteId.isEmpty()
+                && !novoPacienteId.equals(uidPacienteAtivo)) {
+            uidPacienteDoAlerta = novoPacienteId;
+            // Troca diretamente se o paciente já está na lista carregada
+            if (todosUids.contains(novoPacienteId)) {
+                uidPacienteAtivo = novoPacienteId;
+                ouvirPaciente(novoPacienteId);
+                construirChips(todosUids);
+            }
+            // Se a lista ainda não foi carregada, uidPacienteDoAlerta será usado
+            // quando carregarDadosCuidador() terminar de carregar os UIDs
+        }
     }
 
     @Override
@@ -128,7 +165,17 @@ public class CaregiverActivity extends AppCompatActivity {
                     todosUids.clear();
                     todosUids.addAll(uids);
 
-                    if (uidPacienteAtivo == null || !uids.contains(uidPacienteAtivo)) {
+                    // Prioridade de seleção do paciente ativo:
+                    // 1. pacienteId vindo da notificação de alerta (uidPacienteDoAlerta)
+                    // 2. paciente já ativo que ainda está na lista (mantém seleção ao recarregar)
+                    // 3. primeiro paciente da lista (fallback padrão)
+                    if (uidPacienteDoAlerta != null && uids.contains(uidPacienteDoAlerta)) {
+                        if (!uidPacienteDoAlerta.equals(uidPacienteAtivo)) {
+                            uidPacienteAtivo    = uidPacienteDoAlerta;
+                            ouvirPaciente(uidPacienteAtivo);
+                        }
+                        uidPacienteDoAlerta = null; // consumido — não fica "preso" neste paciente
+                    } else if (uidPacienteAtivo == null || !uids.contains(uidPacienteAtivo)) {
                         uidPacienteAtivo = uids.get(0);
                         ouvirPaciente(uidPacienteAtivo);
                     }

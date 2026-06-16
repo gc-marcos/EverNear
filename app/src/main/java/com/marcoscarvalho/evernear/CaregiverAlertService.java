@@ -175,11 +175,14 @@ public class CaregiverAlertService extends Service {
                         // Marca como notificado ANTES de exibir (evita duplicata em re-entradas)
                         marcarComoNotificado(alertaId);
 
-                        String paciente = dc.getDocument().getString("pacienteNome");
-                        Long   bpm      = dc.getDocument().getLong("bpm");
-                        String tipo     = dc.getDocument().getString("tipo");
+                        // pacienteId: ao clicar na notificação, a CaregiverActivity abre
+                        // diretamente na ficha deste paciente (não no primeiro da lista)
+                        String pacienteId = dc.getDocument().getString("pacienteId");
+                        String paciente   = dc.getDocument().getString("pacienteNome");
+                        Long   bpm        = dc.getDocument().getLong("bpm");
+                        String tipo       = dc.getDocument().getString("tipo");
 
-                        exibirNotificacaoAlerta(alertaId, paciente,
+                        exibirNotificacaoAlerta(alertaId, pacienteId, paciente,
                                 bpm != null ? bpm.intValue() : 0, tipo);
                     }
                 });
@@ -262,7 +265,18 @@ public class CaregiverAlertService extends Service {
                 .build();
     }
 
-    private void exibirNotificacaoAlerta(String alertaId, String paciente, int bpm, String tipo) {
+    /**
+     * Exibe a notificação de alerta para o cuidador.
+     *
+     * @param alertaId   ID do documento de alerta no Firestore
+     * @param pacienteId UID do paciente — passado no intent para que a
+     *                   CaregiverActivity abra diretamente na ficha deste paciente
+     * @param paciente   Nome do paciente (exibido na notificação)
+     * @param bpm        BPM no momento da anomalia
+     * @param tipo       "HIGH", "LOW" ou "MANUAL"
+     */
+    private void exibirNotificacaoAlerta(String alertaId, String pacienteId,
+                                          String paciente, int bpm, String tipo) {
         String titulo;
         String emoji;
         boolean isEmergencia = "MANUAL".equals(tipo);
@@ -281,8 +295,16 @@ public class CaregiverAlertService extends Service {
         String nomePac = (paciente != null && !paciente.isEmpty()) ? paciente : "Paciente";
         String texto   = nomePac + " — " + bpm + " bpm";
 
+        // Intent com pacienteId: ao clicar na notificação, a CaregiverActivity
+        // abre (ou troca para) a ficha do paciente que disparou o alerta.
         Intent openApp = new Intent(this, CaregiverActivity.class);
-        openApp.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        openApp.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP
+                | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        if (pacienteId != null && !pacienteId.isEmpty()) {
+            openApp.putExtra("pacienteId", pacienteId);
+        }
+        openApp.putExtra("alertaId", alertaId);
+
         PendingIntent piAbrir = PendingIntent.getActivity(
                 this, alertaId.hashCode(), openApp,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
