@@ -1,0 +1,122 @@
+Analise a classe HeartRateMonitor do projeto EverNear (Wear OS) e implemente as melhorias abaixo sem remover as funcionalidades já existentes.
+
+Objetivo principal:
+Garantir monitoramento contínuo da frequência cardíaca mesmo com a tela apagada ou aplicativo fechado, reduzindo falsos positivos e aumentando a confiabilidade do sistema.
+
+Melhorias necessárias:
+
+1. Foreground Service
+
+* Migrar a execução do HeartRateMonitor para um Foreground Service.
+* O monitoramento deve continuar funcionando mesmo quando a Activity for fechada.
+* O serviço deve iniciar automaticamente quando o usuário iniciar o monitoramento.
+* Exibir notificação persistente informando que o monitoramento cardíaco está ativo.
+* Garantir compatibilidade com Wear OS.
+
+2. Ajuste do Watchdog
+   Atualmente:
+
+WATCHDOG_INTERVAL_MS = 10000
+SENSOR_SILENCE_MS = 10000
+
+Alterar para:
+
+WATCHDOG_INTERVAL_MS = 10000
+SENSOR_SILENCE_MS = 30000
+
+Motivo:
+Evitar re-registros desnecessários do sensor por pequenas pausas na entrega de eventos.
+
+3. Melhorar detecção de atividade física
+   Atualmente os limites são calculados apenas com base no baseline.
+
+Problema:
+Durante caminhada, corrida ou subida de escadas, o BPM pode ultrapassar os limites normais e gerar falsos alertas.
+
+Implementar:
+
+* Uso do TYPE_STEP_COUNTER quando disponível.
+* Alternativamente usar acelerômetro.
+* Detectar quando o usuário está em movimento.
+* Durante movimento:
+
+  * aumentar temporariamente os limites aceitáveis.
+  * ou suspender alertas de frequência alta.
+* Continuar detectando frequência muito baixa mesmo durante movimento.
+
+4. Robustez da Thread
+   Verificar possíveis condições de corrida envolvendo:
+
+* calibrationCount
+* calibrationSum
+* consecutiveOutOfRange
+* lastAlertTime
+
+Caso necessário:
+
+* usar sincronização adequada.
+* manter desempenho.
+* evitar bloqueios desnecessários.
+
+5. Recuperação automática do sensor
+   Quando o watchdog detectar ausência prolongada de leituras:
+
+* tentar re-registrar o listener.
+* realizar até 3 tentativas.
+* registrar logs detalhados.
+* somente após falha total ativar o simulador.
+
+6. Logs de diagnóstico
+   Adicionar logs detalhados para:
+
+* início do monitoramento
+* parada do monitoramento
+* calibração iniciada
+* calibração concluída
+* sensor desconectado
+* sensor recuperado
+* detecção de atividade física
+* alerta disparado
+* envio de mensagem de emergência
+
+Os logs devem facilitar depuração em produção.
+
+7. Otimização de bateria
+   Revisar o uso de:
+
+* HandlerThread
+* SensorManager
+* Watchdog
+
+Objetivos:
+
+* minimizar consumo de bateria.
+* evitar leituras desnecessárias.
+* manter monitoramento contínuo.
+
+8. Boas práticas Wear OS
+   Validar se o uso de:
+
+registerListener(...)
+HandlerThread
+Foreground Service
+
+segue as recomendações atuais para Wear OS.
+
+9. Resultado esperado
+   Ao final, apresentar:
+
+* explicação das alterações realizadas;
+* trechos de código modificados;
+* justificativa técnica de cada mudança;
+* possíveis limitações do Wear OS relacionadas ao sensor cardíaco.
+
+Importante:
+Não remover funcionalidades já existentes:
+
+* calibração automática;
+* limites personalizados;
+* cooldown de alertas;
+* simulador de fallback;
+* watchdog;
+* armazenamento em SharedPreferences.

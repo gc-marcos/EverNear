@@ -43,10 +43,11 @@ import java.util.List;
  */
 public class SetupPermissoesActivity extends AppCompatActivity {
 
-    private static final int REQ_NOTIFICACOES           = 3001;
-    private static final int REQ_BODY_SENSORS           = 3002;
-    private static final int REQ_BODY_SENSORS_BACKGROUND = 3003;
-    private static final int REQ_BATERIA                = 3004;
+    private static final int REQ_NOTIFICACOES             = 3001;
+    private static final int REQ_BODY_SENSORS             = 3002;
+    private static final int REQ_BODY_SENSORS_BACKGROUND  = 3003;
+    private static final int REQ_ACTIVITY_RECOGNITION     = 3004;
+    private static final int REQ_BATERIA                  = 3005;
 
     // ── Tipos de passo ─────────────────────────────────────────────────────
     private enum TipoPasso {
@@ -159,6 +160,20 @@ public class SetupPermissoesActivity extends AppCompatActivity {
                         "😴",
                         "Sensor com tela apagada",
                         "Mantém o monitoramento dos batimentos mesmo quando a tela do relógio está apagada ou você está usando outro app."
+                ));
+            }
+
+            // ── Passo 4: Reconhecimento de atividade (API 29+) ───────────────
+            // Necessário para usar TYPE_STEP_COUNTER no HeartRateMonitor,
+            // que detecta exercício físico e evita falsos alertas de BPM alto.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                passos.add(new Passo(
+                        TipoPasso.PERMISSAO_RUNTIME,
+                        Manifest.permission.ACTIVITY_RECOGNITION,
+                        REQ_ACTIVITY_RECOGNITION,
+                        "🏃",
+                        "Detecção de atividade física",
+                        "Identifica quando você está caminhando ou correndo para evitar alertas desnecessários durante exercícios."
                 ));
             }
         }
