@@ -40,6 +40,13 @@
     <!-- Exibe alerta mesmo com tela bloqueada (como alarme) no celular do cuidador -->
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
 
+    <!--
+        SCHEDULE_EXACT_ALARM: necessário para que setExactAndAllowWhileIdle() funcione
+        no Android 12+ (API 31+). Usado pelo HeartRateService.onTaskRemoved() para
+        reagendar o serviço quando o usuário fecha o app — mesmo durante o modo Doze.
+    -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+
     <!-- ── Chamada telefônica ─────────────────────────────────────────────────── -->
     <uses-permission android:name="android.permission.CALL_PHONE" />
 
@@ -111,12 +118,17 @@
             Serviço de monitoramento contínuo de batimentos cardíacos (PACIENTE — smartwatch).
             • foregroundServiceType="health" — identifica propósito para Android 14+ (API 34+)
             • START_STICKY — Android reinicia se encerrar o processo
+            • stopWithTask="false" — CRÍTICO: sem este atributo, o Android encerra o serviço
+              automaticamente quando o usuário fecha o app (remove dos recentes). Com ele,
+              o serviço sobrevive ao fechamento do app e onTaskRemoved() é chamado para
+              reagendar via AlarmManager se necessário.
             • WakeLock (adquirido internamente) — mantém CPU ativa mesmo com tela apagada
         -->
         <service
             android:name=".HeartRateService"
             android:exported="false"
-            android:foregroundServiceType="health" />
+            android:foregroundServiceType="health"
+            android:stopWithTask="false" />
 
         <!--
             Serviço de recebimento de alertas (CUIDADOR — celular/tablet).

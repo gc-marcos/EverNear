@@ -214,21 +214,32 @@ public class HeartRateMonitor implements SensorEventListener {
     /**
      * Registra o listener no sensor de hardware.
      * Chamado tanto na inicialização quanto pelo watchdog ao re-registrar.
+     *
+     * CRÍTICO — por que usamos bgHandler aqui:
+     * A sobrecarga registerListener(listener, sensor, delay, handler) entrega os eventos
+     * SensorChanged diretamente no looper do handler fornecido. Sem um handler explícito,
+     * os eventos vão para o main looper — que o Wear OS throttle (reduz drasticamente
+     * a frequência) quando a tela apaga, podendo pausar o sensor completamente.
+     *
+     * Com bgHandler (HandlerThread "EverNear-SensorThread"), os eventos chegam ao thread
+     * dedicado que roda com prioridade FOREGROUND e não é afetado pelo throttling da UI,
+     * garantindo leituras contínuas mesmo com a tela do relógio apagada.
      */
     private boolean registrarListenerSensor() {
-        if (sensorManager == null || heartRateSensor == null) return false;
+        if (sensorManager == null || heartRateSensor == null || bgHandler == null) return false;
         try {
+            // Registra no bgHandler: sensor entrega eventos no thread dedicado, não no main looper
             boolean ok = sensorManager.registerListener(
                     this,
                     heartRateSensor,
                     SensorManager.SENSOR_DELAY_NORMAL,
-                    0 /* maxReportLatencyUs = 0 → sem batching; entrega imediata */);
+                    bgHandler);
 
             if (ok) {
                 usingSensor = true;
                 lastSensorEventTime = System.currentTimeMillis();
                 notifyStatus("Sensor cardíaco ativo");
-                Log.d(TAG, "registerListener OK");
+                Log.d(TAG, "registerListener OK → entrega no EverNear-SensorThread");
                 return true;
             }
             Log.w(TAG, "registerListener retornou false");

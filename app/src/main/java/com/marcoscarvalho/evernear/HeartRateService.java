@@ -140,11 +140,19 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
 
     /**
      * Chamado quando o usuário remove o app da lista de recentes (swipe).
-     * Agenda reinício em 5 segundos via AlarmManager para garantir continuidade.
+     *
+     * Com android:stopWithTask="false" no Manifest, o serviço NÃO é encerrado
+     * automaticamente — este método é chamado apenas para notificar o serviço do
+     * fechamento do app. Por segurança extra, agenda um reinício em 10 segundos via
+     * AlarmManager para o caso de o sistema encerrar o processo por pressão de memória.
+     *
+     * IMPORTANTE: usa setExactAndAllowWhileIdle() — o am.set() simples NÃO funciona
+     * durante o modo Doze (Android 6+), que é ativado quando a tela apaga no relógio.
      */
     @Override
     public void onTaskRemoved(Intent rootIntent) {
-        Log.w(TAG, "App removido da lista de recentes — agendando reinício em 5s");
+        Log.w(TAG, "App removido dos recentes — agendando reinício de segurança em 10s");
+
         PendingIntent reiniciar = PendingIntent.getService(
                 this, 1,
                 new Intent(this, HeartRateService.class),
@@ -152,8 +160,12 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
 
         AlarmManager am = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
         if (am != null) {
-            am.set(AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                    SystemClock.elapsedRealtime() + 5_000L, reiniciar);
+            // setExactAndAllowWhileIdle(): dispara mesmo durante Doze (tela apagada)
+            // Requer SCHEDULE_EXACT_ALARM (declarada no Manifest)
+            am.setExactAndAllowWhileIdle(
+                    AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                    SystemClock.elapsedRealtime() + 10_000L,
+                    reiniciar);
         }
         super.onTaskRemoved(rootIntent);
     }
