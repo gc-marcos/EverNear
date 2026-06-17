@@ -9,7 +9,6 @@
     android:padding="20dp"
     tools:context=".CaregiverActivity">
 
-    <!-- Botão voltar (esquerda) -->
     <ImageView
         android:id="@+id/iv_back"
         android:layout_width="28dp"
@@ -20,7 +19,6 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <!-- Título central -->
     <TextView
         android:id="@+id/tv_alert_title"
         android:layout_width="wrap_content"
@@ -33,7 +31,6 @@
         app:layout_constraintStart_toEndOf="@id/iv_back"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <!-- Botão adicionar novo paciente (direita) -->
     <Button
         android:id="@+id/btn_add_paciente"
         android:layout_width="wrap_content"
@@ -48,7 +45,6 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <!-- Card do paciente ativo -->
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/card_alert"
         android:layout_width="0dp"
@@ -105,6 +101,18 @@
             app:layout_constraintTop_toBottomOf="@id/tv_patient_name"
             android:layout_marginStart="12dp"
             android:layout_marginTop="4dp" />
+
+        <TextView
+            android:id="@+id/tv_bpm_timestamp"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="--:--"
+            android:textColor="@color/caregiver_text_secondary"
+            android:textSize="12sp"
+            app:layout_constraintBottom_toBottomOf="@id/tv_bpm_value"
+            app:layout_constraintStart_toEndOf="@id/tv_bpm_value"
+            app:layout_constraintTop_toTopOf="@id/tv_bpm_value"
+            android:layout_marginStart="8dp" />
 
         <TextView
             android:id="@+id/tv_alert_message"
@@ -185,7 +193,6 @@
         </LinearLayout>
     </androidx.constraintlayout.widget.ConstraintLayout>
 
-    <!-- Seção: lista de pacientes vinculados -->
     <LinearLayout
         android:id="@+id/section_pacientes"
         android:layout_width="0dp"
@@ -208,7 +215,6 @@
             android:letterSpacing="0.08"
             android:layout_marginBottom="12dp" />
 
-        <!-- Lista horizontal rolável de pacientes -->
         <HorizontalScrollView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -223,7 +229,6 @@
         </HorizontalScrollView>
     </LinearLayout>
 
-    <!-- Barra inferior (mapa) -->
     <LinearLayout
         android:id="@+id/bottom_map"
         android:layout_width="0dp"

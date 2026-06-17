@@ -1,0 +1,99 @@
+Você é um desenvolvedor Android Sênior especializado em Android 9, Wear OS, Foreground Services e Firebase Firestore.
+
+Analise e refatore completamente a classe CaregiverAlertService do projeto EverNear, mantendo compatibilidade com Android 9 (API 28) e Wear OS.
+
+Objetivo da classe:
+
+* Executar como Foreground Service no dispositivo do cuidador.
+* Permanecer ativo mesmo com o aplicativo fechado.
+* Escutar alertas da coleção "alerts" do Firestore em tempo real.
+* Exibir notificações de emergência e anomalias cardíacas.
+* Reiniciar automaticamente após encerramento do app, reinicialização do dispositivo ou encerramento pelo sistema.
+
+A nova implementação deve aplicar as seguintes melhorias:
+
+1. Evitar múltiplos listeners do Firestore
+
+* Garantir que apenas um SnapshotListener exista por vez.
+* Impedir criação duplicada de listeners após START_STICKY.
+* Antes de criar um listener, verificar se já existe um ativo.
+
+2. Persistência do estado do serviço
+
+* Armazenar em SharedPreferences quando o serviço estiver ativo.
+* Criar método:
+  public static boolean isRunning(Context context)
+* Não depender apenas de uma instância estática.
+
+3. Melhor suporte ao BootReceiver
+
+* Não depender exclusivamente de FirebaseAuth.getCurrentUser().
+* Utilizar SharedPreferences para verificar se o usuário já estava autenticado.
+* Permitir recuperação após reinicialização do dispositivo.
+
+4. Reconexão automática do Firestore
+
+* Detectar erros do SnapshotListener.
+* Remover listeners inválidos.
+* Recriar automaticamente o listener após alguns segundos.
+* Implementar estratégia simples de reconexão usando Handler ou AlarmManager.
+
+5. Melhor gerenciamento do cache de alertas
+
+* Atualmente o cache é limpo completamente ao atingir o limite.
+* Implementar estratégia mais inteligente.
+* Manter apenas os IDs mais recentes.
+* Evitar reapresentação de alertas antigos.
+* Persistir IDs em SharedPreferences.
+
+6. Melhor tratamento de alertas
+
+* Criar método separado:
+  private void processarAlerta(DocumentChange dc)
+* Melhorar legibilidade e manutenção.
+
+7. Melhorar conteúdo das notificações
+
+* Exibir:
+  Nome do paciente
+  BPM atual
+  Tipo do alerta
+  Limite mínimo configurado
+  Limite máximo configurado
+
+Exemplo:
+
+Paciente: João
+BPM Atual: 135
+Limite mínimo: 50
+Limite máximo: 120
+Tipo: HIGH
+
+8. Melhorias de robustez
+
+* Adicionar logs detalhados.
+* Evitar NullPointerException.
+* Validar todos os campos recebidos do Firestore.
+* Garantir que a aplicação não falhe caso algum campo esteja ausente.
+
+9. Android 9 e Wear OS
+
+* Manter Foreground Service.
+* Manter START_STICKY.
+* Manter reinício via onTaskRemoved().
+* Manter compatibilidade com Notification Channels.
+* Manter compatibilidade com Doze Mode.
+
+10. Qualidade do código
+
+* Aplicar princípios SOLID quando possível.
+* Separar responsabilidades em métodos menores.
+* Adicionar comentários explicativos.
+* Melhorar legibilidade geral.
+* Preservar o comportamento atual da aplicação.
+
+Ao final:
+
+* Explique todas as alterações realizadas.
+* Liste vantagens e possíveis impactos de cada melhoria.
+* Informe se existe algum risco de incompatibilidade com Android 9.

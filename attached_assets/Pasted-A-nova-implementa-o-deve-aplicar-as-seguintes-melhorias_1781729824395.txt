@@ -1,0 +1,63 @@
+A nova implementação deve aplicar as seguintes melhorias na CaregiverAlertService:
+
+Evitar múltiplos listeners do Firestore
+Garantir que apenas um SnapshotListener exista por vez.
+Impedir criação duplicada de listeners após START_STICKY.
+Antes de criar um listener, verificar se já existe um ativo.
+Persistência do estado do serviço
+Armazenar em SharedPreferences quando o serviço estiver ativo.
+Criar método:
+public static boolean isRunning(Context context)
+Não depender apenas de uma instância estática.
+Melhor suporte ao BootReceiver
+Não depender exclusivamente de FirebaseAuth.getCurrentUser().
+Utilizar SharedPreferences para verificar se o usuário já estava autenticado.
+Permitir recuperação após reinicialização do dispositivo.
+Reconexão automática do Firestore
+Detectar erros do SnapshotListener.
+Remover listeners inválidos.
+Recriar automaticamente o listener após alguns segundos.
+Implementar estratégia simples de reconexão usando Handler ou AlarmManager.
+Melhor gerenciamento do cache de alertas
+Atualmente o cache é limpo completamente ao atingir o limite.
+Implementar estratégia mais inteligente.
+Manter apenas os IDs mais recentes.
+Evitar reapresentação de alertas antigos.
+Persistir IDs em SharedPreferences.
+Melhor tratamento de alertas
+Criar método separado:
+private void processarAlerta(DocumentChange dc)
+Melhorar legibilidade e manutenção.
+Melhorar conteúdo das notificações
+Exibir:
+Nome do paciente
+BPM atual
+Tipo do alerta
+Limite mínimo configurado
+Limite máximo configurado
+
+Exemplo:
+
+Paciente: João
+BPM Atual: 135
+Limite mínimo: 50
+Limite máximo: 120
+Tipo: HIGH
+
+Melhorias de robustez
+Adicionar logs detalhados.
+Evitar NullPointerException.
+Validar todos os campos recebidos do Firestore.
+Garantir que a aplicação não falhe caso algum campo esteja ausente.
+Android 9 e Wear OS
+Manter Foreground Service.
+Manter START_STICKY.
+Manter reinício via onTaskRemoved().
+Manter compatibilidade com Notification Channels.
+Manter compatibilidade com Doze Mode.
+Qualidade do código
+Aplicar princípios SOLID quando possível.
+Separar responsabilidades em métodos menores.
+Adicionar comentários explicativos.
+Melhorar legibilidade geral.
+Preservar o comportamento atual da aplicação.
