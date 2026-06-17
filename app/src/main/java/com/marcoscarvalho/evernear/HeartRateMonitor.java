@@ -11,8 +11,6 @@ import android.os.HandlerThread;
 import android.os.Looper;
 import android.util.Log;
 
-import java.util.Random;
-
 /**
  * Gerencia a leitura de frequência cardíaca via SensorManager (Wear OS / Android).
  *
@@ -35,9 +33,12 @@ import java.util.Random;
  * │  Alertas de frequência BAIXA sempre disparam, mesmo durante exercício.       │
  * └─────────────────────────────────────────────────────────────────────────────┘
  *
- * ┌─ Recuperação automática do sensor ─────────────────────────────────────────┐
- * │  O watchdog tenta re-registrar o listener até MAX_SENSOR_RETRIES (3) vezes. │
- * │  Só ativa o simulador após todas as tentativas falharem.                    │
+ * ┌─ Sensor obrigatório ────────────────────────────────────────────────────────┐
+ * │  TYPE_HEART_RATE é pré-requisito para o funcionamento do app.               │
+ * │  Se o sensor não estiver disponível (ou se o watchdog esgotar as 3          │
+ * │  tentativas de recuperação), onSensorIndisponivel() é chamado e o app       │
+ * │  exibe uma mensagem informando que não é possível utilizar o EverNear       │
+ * │  neste dispositivo. Nenhum dado simulado é gerado.                          │
  * └─────────────────────────────────────────────────────────────────────────────┘
  */
 public class HeartRateMonitor implements SensorEventListener {
@@ -73,11 +74,8 @@ public class HeartRateMonitor implements SensorEventListener {
      * normais na entrega de eventos (ex.: modo ambient do Wear OS).
      */
     private static final long SENSOR_SILENCE_MS    = 30_000L;
-    /** Número máximo de tentativas de re-registro antes de cair para o simulador. */
+    /** Número máximo de tentativas de re-registro antes de notificar onSensorIndisponivel(). */
     private static final int  MAX_SENSOR_RETRIES   = 3;
-
-    // ── Simulador de fallback ─────────────────────────────────────────────────
-    private static final long SIMULATOR_INTERVAL_MS = 3_000L;
 
     // ── Detecção de atividade física ──────────────────────────────────────────
     /** Passos mínimos em um ciclo de watchdog (10 s) para considerar "em movimento". */
@@ -103,6 +101,12 @@ public class HeartRateMonitor implements SensorEventListener {
         void onAnomaly(int bpm, AnomalyType tipo);
         void onCalibrationComplete(int baseline, int min, int max);
         void onCalibrationProgress(int collected, int total);
+        /**
+         * Chamado quando o sensor cardíaco não está disponível neste dispositivo
+         * ou quando o watchdog esgota todas as tentativas de recuperação.
+         * O app deve informar o usuário e encerrar o monitoramento.
+         */
+        void onSensorIndisponivel();
     }
 
     // ── Infraestrutura ─────────────────────────────────────────────────────────
@@ -137,11 +141,6 @@ public class HeartRateMonitor implements SensorEventListener {
     // Estado de movimento (volatile para leitura segura em getBpmMaxEfetivo)
     private volatile boolean emMovimento       = false;
     private volatile long    lastMovimentoTime = 0L;
-
-    // ── Simulador ─────────────────────────────────────────────────────────────
-    private Runnable   simulatorRunnable;
-    private final Random random      = new Random();
-    private int        simulatorBpm  = 75;
 
     // ── Calibração ────────────────────────────────────────────────────────────
     // Acessados EXCLUSIVAMENTE no bgHandler → sem sincronização adicional necessária
@@ -180,8 +179,8 @@ public class HeartRateMonitor implements SensorEventListener {
 
     /**
      * Inicia o monitoramento.
-     * Tenta sensor de hardware primeiro; usa simulador como fallback.
-     * Registra sensor de atividade física para reduzir falsos positivos.
+     * Se o sensor TYPE_HEART_RATE não estiver disponível, notifica via
+     * onSensorIndisponivel() — sem fallback de simulação.
      */
     public void iniciar() {
         Log.i(TAG, "══ Iniciando monitoramento cardíaco ══");
@@ -190,9 +189,8 @@ public class HeartRateMonitor implements SensorEventListener {
             tentarSensorAtividade();
             iniciarWatchdog();
         } else {
-            Log.w(TAG, "Sensor de hardware indisponível — ativando simulador");
-            tentarSensorAtividade();
-            iniciarSimulador();
+            Log.e(TAG, "Sensor TYPE_HEART_RATE indisponível neste dispositivo");
+            notifySensorIndisponivel();
         }
     }
 
@@ -227,10 +225,9 @@ public class HeartRateMonitor implements SensorEventListener {
             }
         }
 
-        usingSensor       = false;
-        simulatorRunnable = null;
-        sensorRetryCount  = 0;
-        emMovimento       = false;
+        usingSensor      = false;
+        sensorRetryCount = 0;
+        emMovimento      = false;
 
         if (sensorThread != null) {
             sensorThread.quitSafely();
@@ -472,7 +469,7 @@ public class HeartRateMonitor implements SensorEventListener {
      *  1. Verificar timeout de movimento (sem passos por 60 s → parado)
      *  2. Verificar saúde do sensor cardíaco
      *  3. Tentar recuperação automática (até MAX_SENSOR_RETRIES = 3)
-     *  4. Ativar simulador se todas as tentativas falharem
+     *  4. Notificar onSensorIndisponivel() se todas as tentativas falharem
      */
     private void iniciarWatchdog() {
         bgHandler.postDelayed(new Runnable() {
@@ -504,7 +501,7 @@ public class HeartRateMonitor implements SensorEventListener {
      *  - Silêncio > SENSOR_SILENCE_MS (30 s): desregistra e tenta re-registrar
      *  - Sucesso: reseta contador; continua watchdog normalmente
      *  - Falha: incrementa contador; tenta novamente no próximo ciclo
-     *  - Após MAX_SENSOR_RETRIES (3) falhas: ativa simulador definitivamente
+     *  - Após MAX_SENSOR_RETRIES (3) falhas: notifica onSensorIndisponivel()
      */
     private void verificarSaudeSensor() {
         if (!usingSensor || sensorManager == null) return;
@@ -512,7 +509,6 @@ public class HeartRateMonitor implements SensorEventListener {
         long silencioMs = System.currentTimeMillis() - lastSensorEventTime;
 
         if (silencioMs <= SENSOR_SILENCE_MS) {
-            // Sensor saudável: reseta retries se necessário
             if (sensorRetryCount > 0) {
                 Log.d(TAG, "Watchdog: sensor cardíaco OK — retries zerados");
                 sensorRetryCount = 0;
@@ -532,59 +528,21 @@ public class HeartRateMonitor implements SensorEventListener {
         if (ok) {
             Log.i(TAG, "Watchdog: sensor cardíaco re-registrado com sucesso"
                     + " (tentativa " + sensorRetryCount + ")");
-            // Não reseta sensorRetryCount aqui: reseta quando chegar evento real do sensor
         } else if (sensorRetryCount >= MAX_SENSOR_RETRIES) {
             Log.e(TAG, "Watchdog: " + MAX_SENSOR_RETRIES
-                    + " tentativas esgotadas → ativando simulador de fallback");
+                    + " tentativas esgotadas — sensor cardíaco irrecuperável");
             usingSensor = false;
-            iniciarSimulador();
-            // Watchdog para de verificar (usingSensor=false fará verificarSaudeSensor retornar)
+            notifySensorIndisponivel();
         } else {
             Log.w(TAG, "Watchdog: re-registro falhou na tentativa " + sensorRetryCount
                     + " — próxima em " + (WATCHDOG_INTERVAL_MS / 1000) + "s");
         }
     }
 
-    // ==================== Simulador de fallback ====================
-
-    /**
-     * Gera BPM simulado com variação realista.
-     * Executado no bgHandler para não sofrer throttling do main looper.
-     * Inclui spikes periódicos para testar o sistema de alertas.
-     */
-    private void iniciarSimulador() {
-        if (bgHandler == null) return;
-        Log.w(TAG, "── Simulador de fallback ativado (sensor indisponível) ──");
-        notifyStatus("Modo simulação — sensor indisponível");
-
-        simulatorRunnable = new Runnable() {
-            @Override
-            public void run() {
-                if (simulatorRunnable == null) return;
-
-                // Variação aleatória ±3 bpm
-                int delta = random.nextInt(7) - 3;
-                simulatorBpm = Math.max(40, Math.min(180, simulatorBpm + delta));
-
-                // 2% de chance de spike para teste de alertas
-                if (random.nextInt(50) == 0) {
-                    simulatorBpm += (random.nextBoolean() ? 1 : -1) * (25 + random.nextInt(20));
-                    simulatorBpm = Math.max(40, Math.min(180, simulatorBpm));
-                }
-
-                processarLeitura(simulatorBpm);
-                if (simulatorRunnable != null) {
-                    bgHandler.postDelayed(this, SIMULATOR_INTERVAL_MS);
-                }
-            }
-        };
-        bgHandler.postDelayed(simulatorRunnable, 1_000L);
-    }
-
     // ==================== Processamento da leitura ====================
 
     /**
-     * Processa um valor de BPM (sensor físico ou simulador).
+     * Processa um valor de BPM recebido do sensor físico.
      * SEMPRE executado no EverNear-SensorThread — thread safety garantido.
      *
      * Detecção de anomalia com ajuste de atividade física:
@@ -690,5 +648,9 @@ public class HeartRateMonitor implements SensorEventListener {
 
     private void notifyStatus(String s) {
         mainHandler.post(() -> listener.onStatusChange(s));
+    }
+
+    private void notifySensorIndisponivel() {
+        mainHandler.post(() -> listener.onSensorIndisponivel());
     }
 }

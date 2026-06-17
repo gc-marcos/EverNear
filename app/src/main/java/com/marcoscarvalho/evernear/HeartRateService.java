@@ -336,6 +336,19 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
                 buildNotification("Calibrado — baseline " + baseline + " bpm", "--"));
     }
 
+    /**
+     * Sensor cardíaco indisponível: repassa à Activity e encerra o serviço.
+     * Sem simulador — o EverNear requer hardware real para funcionar.
+     */
+    @Override
+    public void onSensorIndisponivel() {
+        Log.e(TAG, "Sensor cardíaco indisponível — encerrando serviço");
+        HeartRateMonitor.Listener act = getActivityListener();
+        if (act != null) act.onSensorIndisponivel();
+        stopForeground(true);
+        stopSelf();
+    }
+
     // ==================== Escalada de alertas ====================
 
     /**
