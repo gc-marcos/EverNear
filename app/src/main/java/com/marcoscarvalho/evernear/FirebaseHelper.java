@@ -1,32 +1,118 @@
 package com.marcoscarvalho.evernear;
 
+import android.util.Log;
+
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FieldValue;
 import com.google.firebase.firestore.FirebaseFirestore;
 
+import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 
 public class FirebaseHelper {
 
+    private static final String TAG = "FirebaseHelper";
+
     private static final FirebaseFirestore db = FirebaseFirestore.getInstance();
+
+    /** Máximo de tentativas para gerar um código de vínculo único. */
+    private static final int MAX_TENTATIVAS_CODIGO = 5;
 
     public interface Callback<T> {
         void onResult(T result);
         void onError(Exception e);
     }
 
+    /**
+     * Gera um código de vínculo aleatório de 6 caracteres alfanuméricos.
+     *
+     * Usa SecureRandom em vez de Random para maior aleatoriedade e menor
+     * probabilidade de colisão, sem custo de performance perceptível.
+     * Espaço de 36^6 ≈ 2,17 bilhões de combinações.
+     */
     public static String gerarCodigoVinculo() {
-        String chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-        StringBuilder salt = new StringBuilder();
-        Random rnd = new Random();
-        while (salt.length() < 6) {
-            salt.append(chars.charAt((int) (rnd.nextFloat() * chars.length())));
+        String chars  = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        SecureRandom  rnd    = new SecureRandom();
+        StringBuilder codigo = new StringBuilder(6);
+        for (int i = 0; i < 6; i++) {
+            codigo.append(chars.charAt(rnd.nextInt(chars.length())));
         }
-        return salt.toString();
+        return codigo.toString();
+    }
+
+    /**
+     * Garante que o paciente tenha um código de vínculo único no Firestore.
+     *
+     * Fluxo:
+     *  1. Lê o documento do usuário — se já tiver código, retorna imediatamente (sem write).
+     *  2. Se não tiver, gera um código aleatório com {@link #gerarCodigoVinculo()}.
+     *  3. Verifica se o código já está em uso por outro paciente.
+     *  4. Se colidir, tenta novamente (até MAX_TENTATIVAS_CODIGO vezes).
+     *  5. Se único, salva no documento e retorna via callback.
+     *
+     * Garante unicidade real no Firestore, diferente de gerar e salvar sem verificação.
+     *
+     * @param uid      UID do paciente
+     * @param callback onResult(codigo) em caso de sucesso; onError em caso de falha
+     */
+    public static void garantirCodigoUnico(String uid, Callback<String> callback) {
+        // Primeiro verifica se o código já existe para evitar write desnecessário
+        db.collection("users").document(uid).get()
+                .addOnSuccessListener(doc -> {
+                    if (!doc.exists()) {
+                        callback.onError(new Exception("Documento do usuário não encontrado"));
+                        return;
+                    }
+                    String codigoExistente = doc.getString("codigoVinculo");
+                    if (codigoExistente != null && !codigoExistente.isEmpty()) {
+                        // Código já existe — não gera outro
+                        callback.onResult(codigoExistente);
+                        return;
+                    }
+                    // Código ausente: gera com verificação de unicidade
+                    gerarESalvarCodigoUnico(uid, 0, callback);
+                })
+                .addOnFailureListener(callback::onError);
+    }
+
+    /**
+     * Tentativa recursiva de gerar e salvar um código único.
+     * Chamada internamente por {@link #garantirCodigoUnico}.
+     */
+    private static void gerarESalvarCodigoUnico(String uid, int tentativa,
+                                                 Callback<String> callback) {
+        if (tentativa >= MAX_TENTATIVAS_CODIGO) {
+            callback.onError(new Exception(
+                    "Não foi possível gerar código único após " + MAX_TENTATIVAS_CODIGO + " tentativas"));
+            return;
+        }
+
+        String novoCodigo = gerarCodigoVinculo();
+
+        // Verifica colisão: outro paciente já usa este código?
+        db.collection("users")
+                .whereEqualTo("codigoVinculo", novoCodigo)
+                .get()
+                .addOnSuccessListener(qs -> {
+                    if (!qs.isEmpty()) {
+                        // Colisão detectada — tenta novamente com outro código
+                        Log.w(TAG, "Colisão de código detectada (tentativa " + tentativa + ") — retentando");
+                        gerarESalvarCodigoUnico(uid, tentativa + 1, callback);
+                        return;
+                    }
+                    // Código único confirmado — salva no documento
+                    db.collection("users").document(uid)
+                            .update("codigoVinculo", novoCodigo)
+                            .addOnSuccessListener(v -> {
+                                Log.d(TAG, "Código único gerado e salvo: " + novoCodigo);
+                                callback.onResult(novoCodigo);
+                            })
+                            .addOnFailureListener(callback::onError);
+                })
+                .addOnFailureListener(callback::onError);
     }
 
     /**
@@ -109,12 +195,19 @@ public class FirebaseHelper {
     }
 
     /**
-     * Atualiza o BPM atual do paciente (throttled pelo chamador — sem callback).
+     * Atualiza o BPM atual do paciente e o timestamp da última atualização.
+     * Throttled pelo chamador — sem callback para não bloquear o sensor thread.
+     *
+     * Campos escritos:
+     *  - ultimoBpm           (Number)
+     *  - ultimoBpmTimestamp  (Timestamp — server-side)
+     *  - ultimaAtualizacao   (Number — millis cliente, para cálculos de "há X min")
      */
     public static void atualizarBpm(String uidPaciente, int bpm) {
         Map<String, Object> updates = new HashMap<>();
         updates.put("ultimoBpm", bpm);
         updates.put("ultimoBpmTimestamp", FieldValue.serverTimestamp());
+        updates.put("ultimaAtualizacao", System.currentTimeMillis());
         db.collection("users").document(uidPaciente).update(updates);
     }
 

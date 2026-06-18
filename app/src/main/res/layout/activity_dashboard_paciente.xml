@@ -102,18 +102,75 @@
             </LinearLayout>
         </androidx.cardview.widget.CardView>
 
-        <!-- Status do vínculo -->
+        <!-- Status geral do vínculo -->
         <TextView
             android:id="@+id/tv_status_vinculo"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="20dp"
-            android:layout_marginBottom="32dp"
             android:gravity="center"
             android:text="Compartilhe este código com seu cuidador"
             android:textAlignment="center"
             android:textColor="#9AA4B2"
             android:textSize="16sp" />
+
+        <!-- Lista de cuidadores vinculados (visível quando há ao menos 1 cuidador) -->
+        <LinearLayout
+            android:id="@+id/ll_cuidadores_vinculados"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginTop="12dp"
+            android:visibility="gone" />
+
+        <!-- Card: Status do monitoramento cardíaco (visível quando dados disponíveis) -->
+        <androidx.cardview.widget.CardView
+            android:id="@+id/card_status_saude"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="32dp"
+            android:backgroundTint="#161B22"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="20dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Status do Monitoramento"
+                    android:textColor="#9AA4B2"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:id="@+id/tv_ultimo_bpm"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="#FFFFFF"
+                    android:textSize="16sp"
+                    android:layout_marginTop="8dp" />
+
+                <TextView
+                    android:id="@+id/tv_ultima_sync"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="#9AA4B2"
+                    android:textSize="14sp"
+                    android:layout_marginTop="4dp" />
+
+                <TextView
+                    android:id="@+id/tv_status_monitor"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textSize="14sp"
+                    android:layout_marginTop="4dp" />
+
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
 
     </LinearLayout>
 </ScrollView>
