@@ -1,0 +1,76 @@
+A DashboardCuidadorActivity é responsável por:
+
+Exibir o nome/apelido do cuidador.
+Permitir alteração do apelido.
+Permitir vinculação de pacientes por código.
+Listar pacientes vinculados.
+Exibir a prioridade do cuidador para cada paciente.
+Atualizar os dados em tempo real através do Firestore.
+
+Aplique as seguintes melhorias:
+
+Ciclo de vida do Listener
+Revisar o uso do addSnapshotListener().
+Garantir que o listener seja recriado corretamente quando a Activity voltar para primeiro plano.
+Evitar perda de atualização após onStop().
+Avaliar uso de onStart() e onStop().
+Performance das consultas
+Analisar a estratégia atual que faz uma consulta individual para cada paciente.
+Propor uma abordagem mais eficiente para carregar pacientes vinculados.
+Reduzir número de leituras no Firestore.
+Minimizar impacto de rede e consumo de bateria.
+Ordem consistente dos pacientes
+Garantir que a lista seja exibida sempre na mesma ordem.
+Evitar que consultas assíncronas alterem a posição dos pacientes na tela.
+Atualização da interface
+Avaliar a recriação completa dos Cards a cada atualização.
+Propor uma solução mais eficiente para atualização dos dados.
+Considerar boas práticas para listas dinâmicas.
+Segurança de vinculação
+Revisar o processo de vinculação entre cuidador e paciente.
+Identificar possíveis condições de corrida quando dois cuidadores tentam vincular simultaneamente.
+Garantir consistência dos dados no Firestore.
+Validação do código do paciente
+Revisar a validação do código de vinculação.
+Garantir que apenas códigos válidos sejam aceitos.
+Evitar caracteres inválidos e entradas malformadas.
+Experiência do usuário
+Impedir múltiplos cliques rápidos no botão de vinculação.
+Melhorar feedback visual durante carregamentos.
+Exibir mensagens de erro mais claras para:
+Falta de internet
+Paciente inexistente
+Limite de cuidadores atingido
+Limite de pacientes atingido
+Status dos pacientes
+Avaliar a inclusão de informações adicionais no card:
+Último BPM recebido
+Última sincronização
+Status online/offline
+Nível de bateria do smartwatch
+Sugerir quais dados devem ser armazenados no Firestore para suportar essas funcionalidades.
+Escalabilidade
+Avaliar se a implementação atual suportaria crescimento futuro.
+Identificar pontos que podem dificultar manutenção.
+Sugerir melhorias arquiteturais compatíveis com Android 9.
+Qualidade de código
+Aplicar princípios SOLID quando possível.
+Reduzir duplicação de código.
+Melhorar legibilidade.
+Separar responsabilidades.
+Identificar possíveis NullPointerExceptions.
+Melhorar tratamento de erros.
+
+Ao final da análise:
+
+Explique detalhadamente cada problema encontrado.
+Classifique cada melhoria como:
+Alta prioridade
+Média prioridade
+Baixa prioridade
+Informe impacto em:
+Performance
+Consumo de bateria
+Consumo do Firestore
+Experiência do usuário
+Informe se cada sugestão é totalmente compatível com Android 9 (API 28).
