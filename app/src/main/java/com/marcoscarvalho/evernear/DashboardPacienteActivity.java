@@ -1,10 +1,7 @@
 package com.marcoscarvalho.evernear;
 
-import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
-import android.net.ConnectivityManager;
-import android.net.NetworkInfo;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.Gravity;
@@ -162,7 +159,7 @@ public class DashboardPacienteActivity extends AppCompatActivity {
                 .addSnapshotListener((snapshot, erro) -> {
                     if (erro != null) {
                         Log.w(TAG, "Erro no listener: " + erro.getMessage());
-                        String msg = isConectado()
+                        String msg = EverNearApplication.isOnline()
                                 ? "Erro ao carregar dados. Tente novamente."
                                 : "Sem conexão com a internet.";
                         Toast.makeText(this, msg, Toast.LENGTH_SHORT).show();
@@ -474,7 +471,7 @@ public class DashboardPacienteActivity extends AppCompatActivity {
             @Override
             public void onError(Exception e) {
                 setSalvando(false);
-                String msg = isConectado()
+                String msg = EverNearApplication.isOnline()
                         ? "Erro ao salvar apelido. Tente novamente."
                         : "Sem conexão com a internet.";
                 Toast.makeText(DashboardPacienteActivity.this, msg, Toast.LENGTH_SHORT).show();
@@ -490,15 +487,6 @@ public class DashboardPacienteActivity extends AppCompatActivity {
     }
 
     // ==================== Utilitários ====================
-
-    /** Verifica conexão de rede ativa. Compatível com API 28. */
-    private boolean isConectado() {
-        ConnectivityManager cm =
-                (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
-        if (cm == null) return false;
-        NetworkInfo info = cm.getActiveNetworkInfo();
-        return info != null && info.isConnected();
-    }
 
     /** Compara duas listas de UIDs sem lançar exceções com nulls. */
     private static boolean isMesmaLista(List<String> a, List<String> b) {

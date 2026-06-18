@@ -1,0 +1,63 @@
+A classe EverNearApplication é responsável por:
+
+Inicializar configurações globais do aplicativo.
+Configurar o Firestore.
+Habilitar persistência offline.
+Preparar o ambiente antes da execução de Activities e Services.
+
+Analise a implementação atual considerando os seguintes pontos:
+
+Persistência Offline do Firestore
+Avaliar a configuração atual da persistência offline.
+Verificar se o comportamento é adequado para monitoramento contínuo.
+Identificar riscos de perda de dados ou inconsistência.
+Avaliar impacto em dispositivos com armazenamento limitado.
+Gerenciamento do Cache
+Analisar o uso de CACHE_SIZE_UNLIMITED.
+Avaliar riscos para smartphones e principalmente para smartwatches.
+Propor estratégias mais seguras para controle de armazenamento.
+Explicar vantagens e desvantagens de cada abordagem.
+Monitoramento de Sincronização
+Avaliar mecanismos para acompanhar o estado da sincronização do Firestore.
+Propor formas de registrar:
+Última sincronização realizada.
+Quantidade de dados pendentes.
+Falhas de sincronização.
+Tempo offline.
+Monitoramento de Conectividade
+Avaliar estratégias para detectar:
+Perda de internet.
+Retorno da conexão.
+Operação offline.
+Propor mecanismos para informar o restante do aplicativo sobre mudanças de conectividade.
+Integração com Monitoramento Cardíaco
+Avaliar como a camada global do aplicativo pode apoiar os serviços de monitoramento.
+Propor mecanismos para registrar:
+Status do monitoramento.
+Último envio de dados.
+Última leitura válida do sensor.
+Estado geral do sistema.
+Compatibilidade com Android 9 e Wear OS
+Verificar aderência às limitações do Android 9.
+Avaliar impacto da persistência offline em dispositivos Wear OS.
+Identificar possíveis problemas de memória, armazenamento ou bateria.
+Tratamento de Erros
+Revisar a estratégia atual de captura de exceções.
+Avaliar se erros críticos estão sendo tratados adequadamente.
+Propor melhorias para diagnóstico e recuperação automática.
+Logs e Observabilidade
+Avaliar os logs existentes.
+Propor estratégia de logs para:
+Ambiente de desenvolvimento.
+Ambiente de produção.
+Identificar informações importantes que deveriam ser registradas.
+Inicialização Global do Aplicativo
+Avaliar se existem outras configurações globais que deveriam ser inicializadas nesta classe.
+Identificar oportunidades para centralizar comportamentos compartilhados.
+Escalabilidade
+Avaliar se a estrutura atual suporta crescimento futuro do EverNear.
+Considerar cenários com:
+Mais pacientes.
+Mais cuidadores.
+Maior volume de alertas.
+Histórico de monitoramento.
