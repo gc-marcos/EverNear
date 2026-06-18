@@ -1,0 +1,88 @@
+A DashboardPacienteActivity é responsável por:
+
+Exibir nome ou apelido do paciente.
+Exibir código de vínculo para cuidadores.
+Compartilhar o código de vínculo.
+Permitir alteração do apelido.
+Exibir status do vínculo com cuidador(es).
+Atualizar informações em tempo real utilizando Firestore.
+
+Analise a implementação atual e proponha melhorias considerando os seguintes pontos:
+
+Ciclo de vida da Activity
+Revisar o uso do addSnapshotListener().
+Verificar se o listener está sendo recriado corretamente quando a Activity retorna ao primeiro plano.
+Garantir atualização contínua dos dados após minimizar e reabrir o aplicativo.
+Avaliar uso correto de onStart(), onStop() e onDestroy().
+Robustez da autenticação
+Avaliar riscos caso FirebaseAuth.getCurrentUser() retorne null.
+Garantir tratamento adequado de sessão expirada.
+Melhorar recuperação de dados após reinicialização do aplicativo.
+Geração do código de vínculo
+Revisar a estratégia de geração automática do código.
+Identificar riscos de códigos duplicados.
+Garantir unicidade do código no Firestore.
+Avaliar mecanismos de validação antes de salvar.
+Consumo do Firestore
+Avaliar consultas adicionais realizadas para obter informações do cuidador.
+Identificar leituras desnecessárias.
+Sugerir formas de reduzir custo e consumo de rede.
+Tratamento de erros
+Melhorar comportamento quando:
+Não houver internet.
+Firestore estiver indisponível.
+Documento do usuário não existir.
+Ocorrer falha ao salvar apelido.
+Propor mensagens mais amigáveis ao usuário.
+Experiência do usuário
+Avaliar necessidade de indicador de carregamento.
+Impedir múltiplos cliques simultâneos no botão de salvar apelido.
+Melhorar feedback visual de sucesso e erro.
+Melhorar experiência de compartilhamento do código.
+Informações adicionais para o paciente
+Avaliar a inclusão dos seguintes dados na Dashboard:
+Último BPM registrado.
+Status do monitoramento cardíaco.
+Última sincronização do smartwatch.
+Status online/offline do dispositivo.
+Nível de bateria do relógio.
+Quantidade de cuidadores vinculados.
+Lista de cuidadores vinculados.
+Prioridade de cada cuidador.
+
+Indicar quais campos deveriam existir no Firestore para suportar essas funcionalidades.
+
+Monitoramento do smartwatch
+Analisar formas de informar ao paciente se:
+O monitoramento cardíaco está ativo.
+O serviço de monitoramento foi interrompido.
+O relógio está sem conexão.
+Os dados estão sendo enviados corretamente ao Firestore.
+Escalabilidade
+Avaliar se a implementação atual suportaria crescimento futuro do projeto.
+Identificar pontos que podem dificultar manutenção.
+Propor melhorias compatíveis com Android 9.
+Qualidade do código
+Aplicar princípios SOLID quando possível.
+Melhorar organização dos métodos.
+Melhorar legibilidade.
+Reduzir duplicação de código.
+Identificar riscos de NullPointerException.
+Avaliar separação de responsabilidades.
+
+Ao final da análise:
+
+Explicar detalhadamente cada melhoria proposta.
+Classificar cada melhoria como:
+Alta prioridade
+Média prioridade
+Baixa prioridade
+Informar impacto de cada melhoria em:
+Performance
+Consumo de bateria
+Consumo do Firestore
+Experiência do usuário
+Informar se cada sugestão é totalmente compatível com Android 9 (API 28).
+
+Importante:
+Não reescrever código inicialmente. Primeiro realizar uma análise arquitetural completa da DashboardPacienteActivity, identificar riscos, gargalos e oportunidades de melhoria para o projeto EverNear.
