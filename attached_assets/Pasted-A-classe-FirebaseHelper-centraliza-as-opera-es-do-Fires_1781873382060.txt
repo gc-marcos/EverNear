@@ -1,0 +1,107 @@
+A classe FirebaseHelper centraliza as operações do Firestore, incluindo:
+Cadastro de usuários.
+Geração de códigos de vínculo.
+Vinculação entre pacientes e cuidadores.
+Atualização de dados do paciente.
+Registro de BPM.
+Criação de alertas.
+Confirmação de alertas.
+Consultas ao banco de dados.
+Analise a implementação atual considerando os seguintes pontos:
+1. Arquitetura Geral
+Avaliar se a centralização atual das operações está adequada.
+Identificar responsabilidades excessivas na classe.
+Verificar oportunidades de separação em componentes especializados.
+Avaliar aderência aos princípios SOLID.
+2. Geração de Código de Vínculo
+Avaliar a estratégia utilizada para geração de códigos.
+Identificar riscos de colisão.
+Avaliar mecanismos de validação de unicidade.
+Verificar possíveis condições de corrida durante a criação simultânea de usuários.
+Propor estratégias mais robustas para garantir unicidade.
+3. Consistência dos Dados
+Analisar operações que modificam múltiplos documentos simultaneamente.
+Verificar riscos de:
+Atualização parcial.
+Dados inconsistentes.
+Falhas intermediárias.
+Perda de sincronização entre paciente e cuidador.
+Avaliar necessidade de:
+Transactions.
+WriteBatch.
+Operações atômicas.
+4. Processo de Vinculação
+Avaliar a lógica de:
+Vincular paciente ao cuidador.
+Limite máximo de cuidadores.
+Limite máximo de pacientes por cuidador.
+Controle de duplicidade.
+Identificar cenários onde múltiplos usuários executam a mesma ação simultaneamente.
+Verificar se as validações atuais são suficientes para evitar inconsistências.
+5. Atualização de BPM
+Analisar:
+Frequência das gravações.
+Impacto no Firestore.
+Consumo de rede.
+Consumo de bateria.
+Escalabilidade.
+Avaliar estratégias para:
+Redução de gravações desnecessárias.
+Atualização inteligente.
+Agrupamento de dados.
+Histórico de leituras.
+6. Sistema de Alertas
+Avaliar a modelagem dos alertas.
+Verificar:
+Estrutura dos documentos.
+Campos obrigatórios.
+Campos opcionais.
+Escalabilidade para múltiplos cuidadores.
+Analisar suporte para:
+Frequência alta.
+Frequência baixa.
+Emergência manual.
+Escalonamento de alertas.
+Histórico de ocorrências.
+7. Auditoria e Rastreabilidade
+Avaliar mecanismos para registrar:
+Quem confirmou um alerta.
+Quando confirmou.
+Qual cuidador recebeu primeiro.
+Histórico de ações realizadas.
+Propor melhorias para auditoria e rastreamento dos eventos.
+8. Monitoramento do Dispositivo
+Avaliar a possibilidade de registrar no Firestore:
+Último BPM recebido.
+Última sincronização.
+Estado do monitoramento.
+Status online/offline.
+Nível de bateria do relógio.
+Integridade do sensor.
+Indicar quais campos deveriam existir para suportar essas funcionalidades.
+9. Tratamento de Erros
+Analisar:
+Falhas de rede.
+Falhas do Firestore.
+Timeouts.
+Dados inválidos.
+Usuários inexistentes.
+Verificar se os erros são tratados adequadamente e propor melhorias.
+10. Escalabilidade
+Avaliar comportamento da solução quando houver:
+Centenas de pacientes.
+Múltiplos cuidadores por paciente.
+Grande volume de alertas.
+Histórico de monitoramento prolongado.
+Identificar gargalos e possíveis otimizações.
+11. Segurança
+Avaliar:
+Exposição de dados.
+Validações no cliente.
+Dependência exclusiva da aplicação para regras de negócio.
+Necessidade de reforço através de Firestore Security Rules.
+12. Compatibilidade Android 9
+Verificar se todas as melhorias propostas permanecem compatíveis com:
+Android 9 (API 28)
+Wear OS
+Firebase Firestore Offline Persistence

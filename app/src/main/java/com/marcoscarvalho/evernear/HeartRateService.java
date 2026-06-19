@@ -257,10 +257,16 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
     private void iniciarMonitor() {
         if (monitor == null) monitor = new HeartRateMonitor(this, this);
         monitor.iniciar();
+        if (uidPaciente != null) {
+            FirebaseHelper.salvarStatusMonitoramento(uidPaciente, "ATIVO");
+        }
         Log.d(TAG, "Monitor cardíaco iniciado");
     }
 
     private void pararServico() {
+        if (uidPaciente != null) {
+            FirebaseHelper.salvarStatusMonitoramento(uidPaciente, "PARADO");
+        }
         if (monitor != null) monitor.parar();
         stopForeground(true);
         stopSelf();
@@ -331,18 +337,32 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
     public void onCalibrationComplete(int baseline, int min, int max) {
         HeartRateMonitor.Listener act = getActivityListener();
         if (act != null) act.onCalibrationComplete(baseline, min, max);
-        if (uidPaciente != null) FirebaseHelper.salvarBaseline(uidPaciente, baseline, min, max);
+        if (uidPaciente != null) {
+            FirebaseHelper.salvarBaseline(uidPaciente, baseline, min, max,
+                    new FirebaseHelper.Callback<Void>() {
+                        @Override public void onResult(Void v) {
+                            Log.d(TAG, "Baseline persistido: " + baseline + " bpm [" + min + "-" + max + "]");
+                        }
+                        @Override public void onError(Exception e) {
+                            Log.e(TAG, "Falha ao salvar baseline — dados de calibração perdidos: "
+                                    + e.getMessage());
+                        }
+                    });
+        }
         notifManager.notify(NOTIF_ID,
                 buildNotification("Calibrado — baseline " + baseline + " bpm", "--"));
     }
 
     /**
-     * Sensor cardíaco indisponível: repassa à Activity e encerra o serviço.
+     * Sensor cardíaco indisponível: registra status no Firestore, repassa à Activity e encerra.
      * Sem simulador — o EverNear requer hardware real para funcionar.
      */
     @Override
     public void onSensorIndisponivel() {
         Log.e(TAG, "Sensor cardíaco indisponível — encerrando serviço");
+        if (uidPaciente != null) {
+            FirebaseHelper.salvarStatusMonitoramento(uidPaciente, "SEM_SENSOR");
+        }
         HeartRateMonitor.Listener act = getActivityListener();
         if (act != null) act.onSensorIndisponivel();
         stopForeground(true);
@@ -375,8 +395,11 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
 
         Log.d(TAG, "Enviando alerta para cuidador[" + indice + "]: " + uidCuidador);
 
+        int bpmMin = (monitor != null) ? monitor.getBpmMin() : -1;
+        int bpmMax = (monitor != null) ? monitor.getBpmMax() : -1;
+
         FirebaseHelper.enviarAlerta(
-                uidPaciente, nomePaciente, uidCuidador, bpm, tipo, indice,
+                uidPaciente, nomePaciente, uidCuidador, bpm, tipo, indice, bpmMin, bpmMax,
                 new FirebaseHelper.Callback<String>() {
                     @Override
                     public void onResult(String alertaId) {

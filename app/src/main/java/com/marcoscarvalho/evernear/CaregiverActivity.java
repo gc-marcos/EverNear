@@ -463,12 +463,25 @@ public class CaregiverActivity extends AppCompatActivity {
         builder.show();
     }
 
-    /** Extrai a confirmação do alerta para método reutilizável. */
+    /**
+     * Confirma o alerta via FirebaseHelper para garantir auditoria completa:
+     * acknowledged=true, acknowledgedBy=uid, acknowledgedAt=serverTimestamp.
+     */
     private void confirmarAlerta(String alertaId) {
-        db.collection("alerts").document(alertaId)
-                .update("acknowledged", true)
-                .addOnFailureListener(e ->
-                        Toast.makeText(this, "Erro ao confirmar alerta", Toast.LENGTH_SHORT).show());
+        String uid = FirebaseAuth.getInstance().getCurrentUser() != null
+                ? FirebaseAuth.getInstance().getCurrentUser().getUid()
+                : null;
+        if (uid == null) {
+            Toast.makeText(this, "Erro: sessão expirada", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        FirebaseHelper.confirmarAlerta(alertaId, uid, new FirebaseHelper.Callback<Void>() {
+            @Override public void onResult(Void v) { /* confirmação silenciosa */ }
+            @Override public void onError(Exception e) {
+                Toast.makeText(CaregiverActivity.this,
+                        "Erro ao confirmar alerta", Toast.LENGTH_SHORT).show();
+            }
+        });
     }
 
     // ==================== Ligar para o paciente ================================
