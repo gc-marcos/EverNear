@@ -21,3 +21,4 @@ npm-debug.log*
 google-services.json
 app/google-services.json
 .idea/
+.idea/deploymentTargetSelector.xml
