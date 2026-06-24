@@ -181,9 +181,21 @@ public class PatientActivity extends AppCompatActivity implements HeartRateMonit
 
             Toast.makeText(this,
                     "Calibração concluída!\n"
-                    + "Baseline: " + baseline + " bpm\n"
-                    + "Intervalo normal: " + min + "–" + max + " bpm",
+                            + "Baseline: " + baseline + " bpm\n"
+                            + "Intervalo normal: " + min + "–" + max + " bpm",
                     Toast.LENGTH_LONG).show();
+        });
+    }
+
+    /**
+     * Watchdog interno esgotou todos os níveis de recuperação.
+     * O HeartRateService já está reiniciando o monitor — a Activity só atualiza a UI.
+     */
+    @Override
+    public void onNecessarioReiniciar() {
+        runOnUiThread(() -> {
+            tvStatus.setText("Reconectando sensor...");
+            tvStatus.setTextColor(android.graphics.Color.parseColor("#FFC107"));
         });
     }
 
@@ -199,8 +211,8 @@ public class PatientActivity extends AppCompatActivity implements HeartRateMonit
                     .setTitle("Sensor cardíaco não encontrado")
                     .setMessage(
                             "O EverNear requer um sensor de frequência cardíaca para funcionar.\n\n"
-                            + "Este dispositivo não possui esse sensor ou ele não está respondendo.\n\n"
-                            + "O aplicativo não pode ser utilizado neste relógio.")
+                                    + "Este dispositivo não possui esse sensor ou ele não está respondendo.\n\n"
+                                    + "O aplicativo não pode ser utilizado neste relógio.")
                     .setIcon(android.R.drawable.ic_dialog_alert)
                     .setCancelable(false)
                     .setPositiveButton("Entendido", (dialog, which) -> {

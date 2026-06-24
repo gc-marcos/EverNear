@@ -19,26 +19,30 @@ import android.util.Log;
  * │  • Todos os sensores e o watchdog são registrados no EverNear-SensorThread   │
  * │    (HandlerThread, prioridade FOREGROUND). Isso evita que o Wear OS          │
  * │    throttle as entregas de eventos quando a tela apaga.                      │
- * │  • processarLeitura() é sempre chamado neste thread → sem necessidade de     │
- * │    sincronização para os campos de calibração/anomalia.                      │
- * │  • recalibrar() posta tarefa no bgHandler para evitar race condition.        │
+ * │  • SENSOR_DELAY_FASTEST: sinaliza ao SensorManager máxima prioridade de     │
+ * │    entrega — crucial para que o sensor cardíaco continue funcionando com a   │
+ * │    tela apagada no Wear OS.                                                  │
+ * └─────────────────────────────────────────────────────────────────────────────┘
+ *
+ * ┌─ Três níveis de recuperação do sensor ──────────────────────────────────────┐
+ * │  NÍVEL 1 — Modo normal (watchdog a cada 10 s):                              │
+ * │    Silêncio > 30 s → desregistra e re-registra o SensorEventListener.       │
+ * │    Até MAX_SENSOR_RETRIES (3) tentativas rápidas.                            │
+ * │                                                                              │
+ * │  NÍVEL 2 — Modo lento (watchdog a cada 60 s):                               │
+ * │    Após 3 falhas rápidas, continua re-registrando a cada 60 s.              │
+ * │    Até SLOW_MODE_MAX_RETRIES (10) tentativas lentas (~10 min no total).     │
+ * │                                                                              │
+ * │  NÍVEL 3 — Reinicialização pelo serviço:                                    │
+ * │    Após SLOW_MODE_MAX_RETRIES falhas, chama onNecessarioReiniciar().        │
+ * │    O HeartRateService destrói e recria este monitor completamente.          │
  * └─────────────────────────────────────────────────────────────────────────────┘
  *
  * ┌─ Detecção de atividade física ──────────────────────────────────────────────┐
- * │  Durante corrida/caminhada o BPM sobe naturalmente acima dos limites normais │
- * │  gerando falsos alertas. A solução:                                          │
- * │  1. TYPE_STEP_COUNTER (preferido — menor consumo de bateria).                │
- * │  2. TYPE_ACCELEROMETER como fallback.                                        │
- * │  Durante movimento: limite superior ampliado em MOVIMENTO_BPM_BUFFER (30).   │
- * │  Alertas de frequência BAIXA sempre disparam, mesmo durante exercício.       │
- * └─────────────────────────────────────────────────────────────────────────────┘
- *
- * ┌─ Sensor obrigatório ────────────────────────────────────────────────────────┐
- * │  TYPE_HEART_RATE é pré-requisito para o funcionamento do app.               │
- * │  Se o sensor não estiver disponível (ou se o watchdog esgotar as 3          │
- * │  tentativas de recuperação), onSensorIndisponivel() é chamado e o app       │
- * │  exibe uma mensagem informando que não é possível utilizar o EverNear       │
- * │  neste dispositivo. Nenhum dado simulado é gerado.                          │
+ * │  Durante corrida/caminhada o BPM sobe naturalmente gerando falsos alertas.  │
+ * │  TYPE_STEP_COUNTER (preferido) ou TYPE_ACCELEROMETER (fallback).            │
+ * │  Durante movimento: limite superior ampliado em MOVIMENTO_BPM_BUFFER (30). │
+ * │  Alertas LOW sempre disparam — bradicardia é perigosa mesmo em exercício.  │
  * └─────────────────────────────────────────────────────────────────────────────┘
  */
 public class HeartRateMonitor implements SensorEventListener {
@@ -54,7 +58,7 @@ public class HeartRateMonitor implements SensorEventListener {
 
     // ── Calibração ─────────────────────────────────────────────────────────────
     private static final int    CALIBRATION_SAMPLES = 30;
-    private static final double THRESHOLD_PERCENT    = 0.25;   // baseline ±25 %
+    private static final double THRESHOLD_PERCENT    = 0.25;
     private static final int    DEFAULT_MIN          = 50;
     private static final int    DEFAULT_MAX          = 120;
     private static final int    ABSOLUTE_MIN         = 40;
@@ -66,30 +70,28 @@ public class HeartRateMonitor implements SensorEventListener {
     private static final long MIN_READING_INTERVAL_MS         = 1_000L;
 
     // ── Watchdog ──────────────────────────────────────────────────────────────
-    /** Frequência de verificação do watchdog. */
-    private static final long WATCHDOG_INTERVAL_MS = 10_000L;
+    /** Intervalo do watchdog em modo normal (3 retentativas rápidas). */
+    private static final long WATCHDOG_INTERVAL_MS      = 10_000L;
+    /** Intervalo do watchdog em modo lento (após esgotar retentativas rápidas). */
+    private static final long WATCHDOG_SLOW_INTERVAL_MS = 60_000L;
+    /** Silêncio mínimo para acionar tentativa de re-registro do listener. */
+    private static final long SENSOR_SILENCE_MS         = 30_000L;
+    /** Retentativas rápidas antes de entrar no modo lento. */
+    private static final int  MAX_SENSOR_RETRIES        = 3;
     /**
-     * Tempo sem leitura antes de tentar re-registrar o sensor.
-     * Alterado de 10 s para 30 s para evitar re-registros por pequenas pausas
-     * normais na entrega de eventos (ex.: modo ambient do Wear OS).
+     * Retentativas no modo lento antes de solicitar reinicialização completa.
+     * 10 tentativas × 60 s = ~10 min sem leitura → chama onNecessarioReiniciar().
+     * O HeartRateService destrói e recria o monitor.
      */
-    private static final long SENSOR_SILENCE_MS    = 30_000L;
-    /** Número máximo de tentativas de re-registro antes de notificar onSensorIndisponivel(). */
-    private static final int  MAX_SENSOR_RETRIES   = 3;
+    private static final int  SLOW_MODE_MAX_RETRIES     = 10;
 
     // ── Detecção de atividade física ──────────────────────────────────────────
-    /** Passos mínimos em um ciclo de watchdog (10 s) para considerar "em movimento". */
-    private static final int   STEP_THRESHOLD            = 3;
-    /** Período sem passos/aceleração após o qual o estado "em movimento" é limpo. */
-    private static final long  MOVEMENT_TIMEOUT_MS       = 60_000L;
-    /** Bônus adicionado ao bpmMax durante atividade física para evitar falsos alertas. */
-    private static final int   MOVIMENTO_BPM_BUFFER      = 30;
-    /** Magnitude de aceleração linear (m/s²) acima da qual considera movimento. */
-    private static final float ACCEL_MOVE_THRESHOLD      = 2.5f;
-    /** Leituras consecutivas do acelerômetro acima do limiar → em movimento. */
-    private static final int   ACCEL_CONSECUTIVE_MOVE    = 5;
-    /** Throttle de processamento do acelerômetro (máx. 2 x / s) para poupar bateria. */
-    private static final long  ACCEL_THROTTLE_MS         = 500L;
+    private static final int   STEP_THRESHOLD         = 3;
+    private static final long  MOVEMENT_TIMEOUT_MS    = 60_000L;
+    private static final int   MOVIMENTO_BPM_BUFFER   = 30;
+    private static final float ACCEL_MOVE_THRESHOLD   = 2.5f;
+    private static final int   ACCEL_CONSECUTIVE_MOVE = 5;
+    private static final long  ACCEL_THROTTLE_MS      = 500L;
 
     // ── Enums e interface ─────────────────────────────────────────────────────
 
@@ -102,11 +104,16 @@ public class HeartRateMonitor implements SensorEventListener {
         void onCalibrationComplete(int baseline, int min, int max);
         void onCalibrationProgress(int collected, int total);
         /**
-         * Chamado quando o sensor cardíaco não está disponível neste dispositivo
-         * ou quando o watchdog esgota todas as tentativas de recuperação.
-         * O app deve informar o usuário e encerrar o monitoramento.
+         * Chamado APENAS quando o hardware TYPE_HEART_RATE não está presente
+         * neste dispositivo. Silêncio temporário não dispara este callback.
          */
         void onSensorIndisponivel();
+        /**
+         * Chamado quando todos os níveis de recuperação do watchdog falharam
+         * (SLOW_MODE_MAX_RETRIES tentativas em modo lento sem leituras).
+         * O HeartRateService deve destruir e recriar este monitor.
+         */
+        void onNecessarioReiniciar();
     }
 
     // ── Infraestrutura ─────────────────────────────────────────────────────────
@@ -123,27 +130,30 @@ public class HeartRateMonitor implements SensorEventListener {
     private Sensor           heartRateSensor;
     private volatile boolean usingSensor         = false;
     private volatile long    lastSensorEventTime = System.currentTimeMillis();
-    /** Contador de tentativas de re-registro (executado apenas em bgHandler). */
-    private int sensorRetryCount = 0;
+
+    // ── Estado do watchdog (executados apenas em bgHandler — sem sincronização) ─
+    /** Retentativas rápidas acumuladas. Quando >= MAX_SENSOR_RETRIES → modo lento. */
+    private int     sensorRetryCount  = 0;
+    /** Indica que o watchdog está em modo lento. */
+    private boolean watchdogModoLento = false;
+    /** Retentativas em modo lento acumuladas. Quando >= SLOW_MODE_MAX_RETRIES → reiniciar. */
+    private int     slowModeRetryCount = 0;
 
     // ── Sensor de atividade física ────────────────────────────────────────────
     private Sensor  activitySensor;
     private boolean useStepCounter = false;
-
-    // Step counter
-    private float lastStepCount    = -1f;
+    private float   lastStepCount    = -1f;
 
     // Acelerômetro
     private final float[] gravity   = {0f, 0f, 9.81f};
     private int   accelMoveCount    = 0;
     private long  lastAccelProcTime = 0L;
 
-    // Estado de movimento (volatile para leitura segura em getBpmMaxEfetivo)
+    // Estado de movimento (volatile para leitura segura em processarLeitura)
     private volatile boolean emMovimento       = false;
     private volatile long    lastMovimentoTime = 0L;
 
-    // ── Calibração ────────────────────────────────────────────────────────────
-    // Acessados EXCLUSIVAMENTE no bgHandler → sem sincronização adicional necessária
+    // ── Calibração (exclusivo ao bgHandler) ───────────────────────────────────
     private volatile boolean calibrating      = false;
     private int              calibrationCount = 0;
     private int              calibrationSum   = 0;
@@ -153,8 +163,7 @@ public class HeartRateMonitor implements SensorEventListener {
     private int bpmMax;
     private int baseline;
 
-    // ── Detecção de anomalia ──────────────────────────────────────────────────
-    // Acessados EXCLUSIVAMENTE no bgHandler → sem sincronização
+    // ── Detecção de anomalia (exclusivo ao bgHandler) ─────────────────────────
     private int         consecutiveOutOfRange = 0;
     private long        lastAlertTime         = 0L;
     private AnomalyType lastAnomalyType       = null;
@@ -179,8 +188,8 @@ public class HeartRateMonitor implements SensorEventListener {
 
     /**
      * Inicia o monitoramento.
-     * Se o sensor TYPE_HEART_RATE não estiver disponível, notifica via
-     * onSensorIndisponivel() — sem fallback de simulação.
+     * Se o hardware TYPE_HEART_RATE não estiver presente neste dispositivo,
+     * notifica via onSensorIndisponivel() — sem fallback de simulação.
      */
     public void iniciar() {
         Log.i(TAG, "══ Iniciando monitoramento cardíaco ══");
@@ -189,15 +198,14 @@ public class HeartRateMonitor implements SensorEventListener {
             tentarSensorAtividade();
             iniciarWatchdog();
         } else {
-            Log.e(TAG, "Sensor TYPE_HEART_RATE indisponível neste dispositivo");
+            Log.e(TAG, "Hardware TYPE_HEART_RATE indisponível neste dispositivo");
             notifySensorIndisponivel();
         }
     }
 
     /**
      * Inicia nova calibração manual.
-     * Postado no bgHandler para ser executado no mesmo thread que processarLeitura(),
-     * evitando race conditions com calibrationCount / calibrationSum.
+     * Postado no bgHandler para evitar race conditions com calibrationCount/Sum.
      */
     public void recalibrar() {
         if (bgHandler == null) return;
@@ -225,9 +233,11 @@ public class HeartRateMonitor implements SensorEventListener {
             }
         }
 
-        usingSensor      = false;
-        sensorRetryCount = 0;
-        emMovimento      = false;
+        usingSensor        = false;
+        sensorRetryCount   = 0;
+        watchdogModoLento  = false;
+        slowModeRetryCount = 0;
+        emMovimento        = false;
 
         if (sensorThread != null) {
             sensorThread.quitSafely();
@@ -248,7 +258,7 @@ public class HeartRateMonitor implements SensorEventListener {
                 android.os.Process.THREAD_PRIORITY_FOREGROUND);
         sensorThread.start();
         bgHandler = new Handler(sensorThread.getLooper());
-        Log.d(TAG, "EverNear-SensorThread iniciado");
+        Log.d(TAG, "EverNear-SensorThread iniciado (prioridade FOREGROUND)");
     }
 
     // ==================== Sensor cardíaco ====================
@@ -260,11 +270,17 @@ public class HeartRateMonitor implements SensorEventListener {
                 Log.w(TAG, "SensorManager indisponível");
                 return false;
             }
-            heartRateSensor = sensorManager.getDefaultSensor(Sensor.TYPE_HEART_RATE);
+            // Tenta versão wakeup primeiro (entrega leituras mesmo durante suspend)
+            heartRateSensor = sensorManager.getDefaultSensor(Sensor.TYPE_HEART_RATE, true);
             if (heartRateSensor == null) {
-                Log.w(TAG, "TYPE_HEART_RATE não encontrado neste dispositivo");
+                heartRateSensor = sensorManager.getDefaultSensor(Sensor.TYPE_HEART_RATE);
+            }
+            if (heartRateSensor == null) {
+                Log.w(TAG, "Hardware TYPE_HEART_RATE não encontrado neste dispositivo");
                 return false;
             }
+            Log.i(TAG, "Sensor cardíaco: " + heartRateSensor.getName()
+                    + " | wakeUp=" + heartRateSensor.isWakeUpSensor());
             return registrarListenerSensor();
         } catch (Exception e) {
             Log.e(TAG, "Erro ao obter SensorManager: " + e.getMessage());
@@ -275,10 +291,13 @@ public class HeartRateMonitor implements SensorEventListener {
     /**
      * Registra o listener no sensor cardíaco entregando eventos no bgHandler.
      *
-     * Sem o handler explícito, os eventos iriam para o main looper — que o
-     * Wear OS reduz agressivamente quando a tela apaga. Com bgHandler, os eventos
-     * chegam no EverNear-SensorThread (prioridade FOREGROUND), garantindo
-     * continuidade mesmo com tela apagada ou app em segundo plano.
+     * SENSOR_DELAY_FASTEST: máxima prioridade de entrega.
+     * No Wear OS, SENSOR_DELAY_NORMAL pode ser throttled quando a tela apaga.
+     * FASTEST sinaliza ao sistema que não reduza a frequência de entrega.
+     *
+     * maxReportLatencyUs=0: desativa FIFO batching.
+     * Garante entrega imediata de cada leitura — essencial para detecção em
+     * tempo real. Com latência > 0, leituras poderiam ser retidas por minutos.
      */
     private boolean registrarListenerSensor() {
         if (sensorManager == null || heartRateSensor == null || bgHandler == null) return false;
@@ -286,12 +305,13 @@ public class HeartRateMonitor implements SensorEventListener {
             boolean ok = sensorManager.registerListener(
                     this,
                     heartRateSensor,
-                    SensorManager.SENSOR_DELAY_NORMAL,
+                    SensorManager.SENSOR_DELAY_FASTEST,
+                    0,           // maxReportLatencyUs=0: sem batching
                     bgHandler);
             if (ok) {
                 usingSensor         = true;
                 lastSensorEventTime = System.currentTimeMillis();
-                Log.d(TAG, "registerListener HR: OK");
+                Log.d(TAG, "registerListener HR (FASTEST, latência=0): OK");
                 return true;
             }
             Log.w(TAG, "registerListener HR: retornou false");
@@ -306,13 +326,8 @@ public class HeartRateMonitor implements SensorEventListener {
 
     /**
      * Registra sensor para detecção de atividade física.
-     *
-     * Prioridade:
-     *  1. TYPE_STEP_COUNTER — acorda apenas quando há passos; baixíssimo consumo
-     *  2. TYPE_ACCELEROMETER — fallback contínuo, com throttle de 500 ms
-     *
-     * Requer permissão ACTIVITY_RECOGNITION (API 29+), já declarada no Manifest
-     * e solicitada em SetupPermissoesActivity.
+     * Usa SENSOR_DELAY_NORMAL (não FASTEST): latência de movimento de poucos
+     * segundos é aceitável e economiza bateria.
      */
     private void tentarSensorAtividade() {
         if (sensorManager == null) return;
@@ -340,7 +355,7 @@ public class HeartRateMonitor implements SensorEventListener {
                 return;
             }
         }
-        Log.w(TAG, "Nenhum sensor de atividade disponível — detecção de movimento desabilitada");
+        Log.w(TAG, "Nenhum sensor de atividade — detecção de movimento desabilitada");
     }
 
     // ==================== Callbacks do SensorManager ====================
@@ -367,19 +382,20 @@ public class HeartRateMonitor implements SensorEventListener {
 
         lastSensorEventTime = System.currentTimeMillis();
 
-        // Sensor voltou a funcionar: registra recuperação e reseta contador de retentativas
-        if (sensorRetryCount > 0) {
-            Log.i(TAG, "Sensor cardíaco recuperado após " + sensorRetryCount + " tentativa(s)");
-            sensorRetryCount = 0;
+        // Sensor voltou a funcionar — reseta todos os contadores de recuperação
+        if (sensorRetryCount > 0 || watchdogModoLento || slowModeRetryCount > 0) {
+            Log.i(TAG, "Sensor cardíaco recuperado após "
+                    + sensorRetryCount + " retentativas rápidas + "
+                    + slowModeRetryCount + " lentas"
+                    + (watchdogModoLento ? " [modo lento]" : ""));
+            sensorRetryCount   = 0;
+            slowModeRetryCount = 0;
+            watchdogModoLento  = false;
+            notifyStatus("Sensor cardíaco ativo");
         }
         processarLeitura(bpm);
     }
 
-    /**
-     * TYPE_STEP_COUNTER: contagem cumulativa desde o boot.
-     * Compara com a leitura anterior para calcular delta de passos.
-     * Se delta >= STEP_THRESHOLD em um ciclo → usuário em movimento.
-     */
     private void processarPassos(SensorEvent event) {
         if (event.values.length == 0) return;
         float totalPassos = event.values[0];
@@ -389,33 +405,25 @@ public class HeartRateMonitor implements SensorEventListener {
             float delta = totalPassos - lastStepCount;
             if (delta >= STEP_THRESHOLD) {
                 if (!emMovimento) {
-                    Log.d(TAG, "Atividade física detectada: +" + (int) delta + " passos");
+                    Log.d(TAG, "Atividade física: +" + (int) delta + " passos");
                 }
-                emMovimento      = true;
+                emMovimento       = true;
                 lastMovimentoTime = agora;
             }
         }
         lastStepCount = totalPassos;
     }
 
-    /**
-     * TYPE_ACCELEROMETER: detecta movimento por magnitude de aceleração linear.
-     * Filtro passa-baixa isola a componente gravitacional (α = 0.8).
-     * Magnitude residual > ACCEL_MOVE_THRESHOLD por N leituras → em movimento.
-     * Throttle: processa no máximo 1 leitura a cada ACCEL_THROTTLE_MS (500 ms).
-     */
     private void processarAcelerometro(SensorEvent event) {
         if (event.values.length < 3) return;
         long agora = System.currentTimeMillis();
         if (agora - lastAccelProcTime < ACCEL_THROTTLE_MS) return;
         lastAccelProcTime = agora;
 
-        // Filtro passa-baixa: estima vetor de gravidade
         gravity[0] = 0.8f * gravity[0] + 0.2f * event.values[0];
         gravity[1] = 0.8f * gravity[1] + 0.2f * event.values[1];
         gravity[2] = 0.8f * gravity[2] + 0.2f * event.values[2];
 
-        // Aceleração linear (remove gravidade)
         float ax  = event.values[0] - gravity[0];
         float ay  = event.values[1] - gravity[1];
         float az  = event.values[2] - gravity[2];
@@ -425,10 +433,10 @@ public class HeartRateMonitor implements SensorEventListener {
             accelMoveCount = Math.min(accelMoveCount + 1, ACCEL_CONSECUTIVE_MOVE);
             if (accelMoveCount >= ACCEL_CONSECUTIVE_MOVE) {
                 if (!emMovimento) {
-                    Log.d(TAG, "Atividade física detectada via acelerômetro: mag="
+                    Log.d(TAG, "Atividade via acelerômetro: mag="
                             + String.format("%.1f", mag) + " m/s²");
                 }
-                emMovimento      = true;
+                emMovimento       = true;
                 lastMovimentoTime = agora;
             }
         } else {
@@ -441,20 +449,16 @@ public class HeartRateMonitor implements SensorEventListener {
         if (sensor.getType() != Sensor.TYPE_HEART_RATE) return;
         switch (accuracy) {
             case SensorManager.SENSOR_STATUS_NO_CONTACT:
-                Log.d(TAG, "Sensor cardíaco: sem contato com a pele");
                 notifyStatus("Sem contato — ajuste o relógio no pulso");
                 break;
             case SensorManager.SENSOR_STATUS_UNRELIABLE:
-                Log.d(TAG, "Sensor cardíaco: leitura instável");
                 notifyStatus("Leitura instável — ajuste o relógio");
                 break;
             case SensorManager.SENSOR_STATUS_ACCURACY_LOW:
-                Log.d(TAG, "Sensor cardíaco: precisão baixa");
                 notifyStatus("Precisão baixa — mantendo monitoramento");
                 break;
             case SensorManager.SENSOR_STATUS_ACCURACY_MEDIUM:
             case SensorManager.SENSOR_STATUS_ACCURACY_HIGH:
-                Log.d(TAG, "Sensor cardíaco: precisão OK (" + accuracy + ")");
                 notifyStatus("Sensor cardíaco ativo");
                 break;
         }
@@ -463,99 +467,126 @@ public class HeartRateMonitor implements SensorEventListener {
     // ==================== Watchdog ====================
 
     /**
-     * Executado no bgHandler a cada WATCHDOG_INTERVAL_MS (10 s).
+     * Executado no bgHandler. Dois modos de operação:
      *
-     * Responsabilidades:
-     *  1. Verificar timeout de movimento (sem passos por 60 s → parado)
-     *  2. Verificar saúde do sensor cardíaco
-     *  3. Tentar recuperação automática (até MAX_SENSOR_RETRIES = 3)
-     *  4. Notificar onSensorIndisponivel() se todas as tentativas falharem
+     * MODO NORMAL  → verifica a cada 10 s. Silêncio > 30 s: re-registra listener.
+     *                Até MAX_SENSOR_RETRIES (3) tentativas antes de ir ao modo lento.
+     *
+     * MODO LENTO   → verifica a cada 60 s. Continua re-registrando.
+     *                Após SLOW_MODE_MAX_RETRIES (10) falhas: chama onNecessarioReiniciar()
+     *                para que o HeartRateService destrua e recrie este monitor.
+     *
+     * O watchdog só para quando parar() é chamado (bgHandler.removeCallbacksAndMessages).
      */
     private void iniciarWatchdog() {
         bgHandler.postDelayed(new Runnable() {
             @Override
             public void run() {
+                if (bgHandler == null) return;
+
                 verificarTimeoutMovimento();
                 verificarSaudeSensor();
-                // Reagenda apenas se ainda há sensor ativo ou estamos em retentativas
-                if (usingSensor || (sensorRetryCount > 0 && sensorRetryCount < MAX_SENSOR_RETRIES)) {
-                    bgHandler.postDelayed(this, WATCHDOG_INTERVAL_MS);
-                }
+
+                long proximoIntervalo = watchdogModoLento
+                        ? WATCHDOG_SLOW_INTERVAL_MS
+                        : WATCHDOG_INTERVAL_MS;
+                bgHandler.postDelayed(this, proximoIntervalo);
             }
         }, WATCHDOG_INTERVAL_MS);
+        Log.d(TAG, "Watchdog iniciado — normal=" + WATCHDOG_INTERVAL_MS / 1000
+                + "s | lento=" + WATCHDOG_SLOW_INTERVAL_MS / 1000 + "s");
     }
 
-    /** Se não houve passos/aceleração por MOVEMENT_TIMEOUT_MS → limpa flag de movimento. */
     private void verificarTimeoutMovimento() {
         if (!emMovimento) return;
         long silencio = System.currentTimeMillis() - lastMovimentoTime;
         if (silencio > MOVEMENT_TIMEOUT_MS) {
             emMovimento = false;
-            Log.d(TAG, "Atividade física: inativo há " + (silencio / 1000) + "s → modo repouso");
+            Log.d(TAG, "Atividade: inativo há " + (silencio / 1000) + "s → repouso");
         }
     }
 
     /**
-     * Verifica se o sensor cardíaco está entregando leituras.
-     * Estratégia de recuperação:
-     *  - Silêncio > SENSOR_SILENCE_MS (30 s): desregistra e tenta re-registrar
-     *  - Sucesso: reseta contador; continua watchdog normalmente
-     *  - Falha: incrementa contador; tenta novamente no próximo ciclo
-     *  - Após MAX_SENSOR_RETRIES (3) falhas: notifica onSensorIndisponivel()
+     * Verifica saúde do sensor e tenta recuperação automática em 3 níveis:
+     *
+     * Nível 1 — Modo normal: re-registra SensorEventListener (até 3 vezes).
+     * Nível 2 — Modo lento: continua re-registrando a cada 60 s (até 10 vezes).
+     * Nível 3 — Reinicialização: chama onNecessarioReiniciar() para que o
+     *            HeartRateService recrie o HeartRateMonitor completamente.
      */
     private void verificarSaudeSensor() {
-        if (!usingSensor || sensorManager == null) return;
+        if (sensorManager == null) return;
 
         long silencioMs = System.currentTimeMillis() - lastSensorEventTime;
 
+        // Sensor respondendo normalmente — reseta todos os contadores
         if (silencioMs <= SENSOR_SILENCE_MS) {
-            if (sensorRetryCount > 0) {
-                Log.d(TAG, "Watchdog: sensor cardíaco OK — retries zerados");
-                sensorRetryCount = 0;
+            if (sensorRetryCount > 0 || watchdogModoLento) {
+                Log.d(TAG, "Watchdog: sensor OK — retomando modo normal");
+                sensorRetryCount   = 0;
+                slowModeRetryCount = 0;
+                watchdogModoLento  = false;
             }
             return;
         }
 
-        // Silêncio além do limiar: tenta recuperação
+        // Sensor em silêncio: tenta re-registro
         sensorRetryCount++;
-        Log.w(TAG, "Watchdog: " + (silencioMs / 1000) + "s sem leitura cardíaca"
-                + " → tentativa de recuperação " + sensorRetryCount + "/" + MAX_SENSOR_RETRIES);
+        Log.w(TAG, "Watchdog [" + (watchdogModoLento ? "LENTO #" + slowModeRetryCount : "NORMAL")
+                + "]: " + (silencioMs / 1000) + "s sem leitura → re-registro #" + sensorRetryCount);
 
         try { sensorManager.unregisterListener(this, heartRateSensor); }
         catch (Exception ignored) {}
+        usingSensor = false;
 
         boolean ok = registrarListenerSensor();
+
         if (ok) {
-            Log.i(TAG, "Watchdog: sensor cardíaco re-registrado com sucesso"
-                    + " (tentativa " + sensorRetryCount + ")");
-        } else if (sensorRetryCount >= MAX_SENSOR_RETRIES) {
-            Log.e(TAG, "Watchdog: " + MAX_SENSOR_RETRIES
-                    + " tentativas esgotadas — sensor cardíaco irrecuperável");
-            usingSensor = false;
-            notifySensorIndisponivel();
+            Log.i(TAG, "Watchdog: listener re-registrado (retentativa " + sensorRetryCount + ")");
+            return;
+        }
+
+        // Re-registro falhou — decide próximo passo
+        if (!watchdogModoLento && sensorRetryCount >= MAX_SENSOR_RETRIES) {
+            // ── Nível 2: transição para modo lento ──────────────────────────
+            watchdogModoLento  = true;
+            slowModeRetryCount = 0;
+            Log.w(TAG, "Watchdog: " + MAX_SENSOR_RETRIES
+                    + " tentativas rápidas esgotadas → MODO LENTO ("
+                    + WATCHDOG_SLOW_INTERVAL_MS / 1000 + "s/ciclo). "
+                    + "Relógio no pulso? Bateria ok?");
+            notifyStatus("Sensor sem leitura — verifique o relógio no pulso");
+
+        } else if (watchdogModoLento) {
+            // ── Nível 2 em curso: conta retentativas lentas ─────────────────
+            slowModeRetryCount++;
+            Log.w(TAG, "Watchdog LENTO: tentativa " + slowModeRetryCount
+                    + "/" + SLOW_MODE_MAX_RETRIES);
+
+            if (slowModeRetryCount >= SLOW_MODE_MAX_RETRIES) {
+                // ── Nível 3: solicita reinicialização completa do monitor ────
+                Log.e(TAG, "Watchdog: " + SLOW_MODE_MAX_RETRIES
+                        + " tentativas lentas esgotadas → solicitando reinicialização do monitor");
+                notifyNecessarioReiniciar();
+                // O HeartRateService chamará parar(), cancelando este watchdog
+            }
+
         } else {
-            Log.w(TAG, "Watchdog: re-registro falhou na tentativa " + sensorRetryCount
-                    + " — próxima em " + (WATCHDOG_INTERVAL_MS / 1000) + "s");
+            Log.w(TAG, "Watchdog: re-registro falhou (tentativa " + sensorRetryCount + ")");
         }
     }
 
     // ==================== Processamento da leitura ====================
 
     /**
-     * Processa um valor de BPM recebido do sensor físico.
-     * SEMPRE executado no EverNear-SensorThread — thread safety garantido.
-     *
-     * Detecção de anomalia com ajuste de atividade física:
-     *  - bpmMaxEfetivo = bpmMax + MOVIMENTO_BPM_BUFFER (30) quando em movimento
-     *  - Alertas HIGH são suprimidos se BPM está dentro do limite ampliado
-     *  - Alertas LOW sempre disparam (bradicardia é perigosa mesmo em exercício)
+     * Processa um BPM do sensor físico.
+     * Sempre executado no EverNear-SensorThread — thread safety garantido.
      */
     private void processarLeitura(int bpm) {
         long agora = System.currentTimeMillis();
         if (agora - lastReadingTime < MIN_READING_INTERVAL_MS) return;
         lastReadingTime = agora;
 
-        // Notifica UI no main thread (seguro: listener espera chamadas de qualquer thread)
         mainHandler.post(() -> listener.onHeartRate(bpm));
 
         // ── Calibração ──────────────────────────────────────────────────────
@@ -569,8 +600,6 @@ public class HeartRateMonitor implements SensorEventListener {
         }
 
         // ── Limites efetivos (ajustados por atividade) ──────────────────────
-        // Durante movimento: limite superior ampliado para prevenir falsos alertas.
-        // Limite inferior mantido: bradicardia durante exercício é sinal de alerta real.
         int     bpmMaxEfetivo = emMovimento ? (bpmMax + MOVIMENTO_BPM_BUFFER) : bpmMax;
         boolean faixaBaixa    = bpm < bpmMin;
         boolean faixaAlta     = bpm > bpmMaxEfetivo;
@@ -588,9 +617,9 @@ public class HeartRateMonitor implements SensorEventListener {
                     lastAlertTime   = agora;
                     lastAnomalyType = tipo;
 
-                    Log.i(TAG, "Alerta disparado: bpm=" + bpm + " tipo=" + tipo
+                    Log.i(TAG, "Alerta: bpm=" + bpm + " tipo=" + tipo
                             + " | min=" + bpmMin + " maxEfetivo=" + bpmMaxEfetivo
-                            + (emMovimento ? " [em movimento]" : ""));
+                            + (emMovimento ? " [movimento]" : ""));
 
                     final int bpmFinal = bpm;
                     mainHandler.post(() -> listener.onAnomaly(bpmFinal, tipo));
@@ -615,7 +644,7 @@ public class HeartRateMonitor implements SensorEventListener {
             calibrationSum   = 0;
             Log.i(TAG, "── Calibração automática inicial agendada ──");
         } else {
-            Log.d(TAG, "Limites carregados: baseline=" + baseline
+            Log.d(TAG, "Limites: baseline=" + baseline
                     + " min=" + bpmMin + " max=" + bpmMax);
         }
     }
@@ -652,5 +681,9 @@ public class HeartRateMonitor implements SensorEventListener {
 
     private void notifySensorIndisponivel() {
         mainHandler.post(() -> listener.onSensorIndisponivel());
+    }
+
+    private void notifyNecessarioReiniciar() {
+        mainHandler.post(() -> listener.onNecessarioReiniciar());
     }
 }
