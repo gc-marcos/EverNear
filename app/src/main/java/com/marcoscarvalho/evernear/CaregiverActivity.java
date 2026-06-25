@@ -43,7 +43,9 @@ public class CaregiverActivity extends AppCompatActivity {
     private TextView     tvPatientName;
     private TextView     tvAvatarInitials;
     private TextView     tvBpmValue;
-    private TextView     tvBpmTimestamp;   // NOVO: mostra quando o BPM foi registrado
+    private TextView     tvBpmTimestamp;
+    private TextView     tvStatusMonitoramento;
+    private View         vStatusDot;
     private View         btnCall;
     private LinearLayout llPacientesSecundarios;
 
@@ -90,7 +92,9 @@ public class CaregiverActivity extends AppCompatActivity {
         tvPatientName          = findViewById(R.id.tv_patient_name);
         tvAvatarInitials       = findViewById(R.id.tv_avatar_initials);
         tvBpmValue             = findViewById(R.id.tv_bpm_value);
-        tvBpmTimestamp         = findViewById(R.id.tv_bpm_timestamp); 
+        tvBpmTimestamp         = findViewById(R.id.tv_bpm_timestamp);
+        tvStatusMonitoramento  = findViewById(R.id.tv_status_monitoramento);
+        vStatusDot             = findViewById(R.id.v_status_dot);
         btnCall                = findViewById(R.id.btn_call);
         llPacientesSecundarios = findViewById(R.id.ll_pacientes_secundarios);
 
@@ -194,6 +198,7 @@ public class CaregiverActivity extends AppCompatActivity {
         tvAvatarInitials.setText("?");
         tvBpmValue.setText("--");
         if (tvBpmTimestamp != null) tvBpmTimestamp.setText("");
+        atualizarStatusMonitoramento(null);
         telefonePaciente = null;
         if (btnCall != null) btnCall.setAlpha(0.4f);
         llPacientesSecundarios.removeAllViews();
@@ -370,18 +375,22 @@ public class CaregiverActivity extends AppCompatActivity {
                                         ? Color.parseColor("#FF5252")
                                         : Color.parseColor("#4CAF50"));
 
-                        // NOVO: exibe quando o BPM foi registrado
+                        // Campo correto: "ultimoBpmTimestamp" (não "ultimoBpmAt")
                         if (tvBpmTimestamp != null) {
-                            Date bpmAt = doc.getDate("ultimoBpmAt");
+                            Date bpmAt = doc.getDate("ultimoBpmTimestamp");
                             tvBpmTimestamp.setText(bpmAt != null
-                                    ? "Atualizado: " + formatarHora(bpmAt)
-                                    : "Horário desconhecido");
+                                    ? "às " + formatarHoraCompleta(bpmAt)
+                                    : "");
                         }
                     } else {
                         tvBpmValue.setText("--");
                         tvBpmValue.setTextColor(Color.parseColor("#8899AA"));
                         if (tvBpmTimestamp != null) tvBpmTimestamp.setText("");
                     }
+
+                    // Status do monitoramento (ATIVO / PARADO / RECONECTANDO / SEM_SENSOR)
+                    String status = doc.getString("statusMonitoramento");
+                    atualizarStatusMonitoramento(status);
                 });
     }
 
@@ -532,9 +541,71 @@ public class CaregiverActivity extends AppCompatActivity {
         return (partes[0].charAt(0) + "" + partes[partes.length - 1].charAt(0)).toUpperCase();
     }
 
-    /** Formata Date como "HH:mm" para exibir horário do último BPM. */
-    private String formatarHora(Date data) {
-        java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("HH:mm",
+    /**
+     * Atualiza o indicador visual de status do monitoramento.
+     *
+     * Cores e textos mapeados do campo "statusMonitoramento" do Firestore
+     * (gravado pelo HeartRateService via FirebaseHelper.salvarStatusMonitoramento):
+     *   ATIVO        → verde  — sensor lendo normalmente
+     *   RECONECTANDO → amarelo — watchdog tentando recuperar o sensor
+     *   PARADO       → cinza  — serviço encerrado intencionalmente
+     *   SEM_SENSOR   → vermelho — hardware indisponível
+     *   null / ""    → cinza  — sem dados ainda
+     */
+    private void atualizarStatusMonitoramento(String status) {
+        if (tvStatusMonitoramento == null || vStatusDot == null) return;
+
+        String texto;
+        int corTexto;
+        int corDot;
+
+        if (status == null || status.isEmpty()) {
+            texto    = "Sem dados";
+            corTexto = Color.parseColor("#9AA4B2");
+            corDot   = Color.parseColor("#9AA4B2");
+        } else {
+            switch (status) {
+                case "ATIVO":
+                    texto    = "Monitoramento ativo";
+                    corTexto = Color.parseColor("#4CAF50");
+                    corDot   = Color.parseColor("#4CAF50");
+                    break;
+                case "RECONECTANDO":
+                    texto    = "Reconectando sensor...";
+                    corTexto = Color.parseColor("#FFC107");
+                    corDot   = Color.parseColor("#FFC107");
+                    break;
+                case "PARADO":
+                    texto    = "Monitoramento parado";
+                    corTexto = Color.parseColor("#9AA4B2");
+                    corDot   = Color.parseColor("#9AA4B2");
+                    break;
+                case "SEM_SENSOR":
+                    texto    = "Sensor indisponível";
+                    corTexto = Color.parseColor("#FF5252");
+                    corDot   = Color.parseColor("#FF5252");
+                    break;
+                default:
+                    texto    = status;
+                    corTexto = Color.parseColor("#9AA4B2");
+                    corDot   = Color.parseColor("#9AA4B2");
+                    break;
+            }
+        }
+
+        tvStatusMonitoramento.setText(texto);
+        tvStatusMonitoramento.setTextColor(corTexto);
+
+        android.graphics.drawable.GradientDrawable dot =
+                new android.graphics.drawable.GradientDrawable();
+        dot.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+        dot.setColor(corDot);
+        vStatusDot.setBackground(dot);
+    }
+
+    /** Formata Date como "dd/MM HH:mm" para exibir data e horário da última leitura. */
+    private String formatarHoraCompleta(Date data) {
+        java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("dd/MM HH:mm",
                 java.util.Locale.getDefault());
         return sdf.format(data);
     }

@@ -47,6 +47,15 @@
     -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
+    <!--
+        REQUEST_IGNORE_BATTERY_OPTIMIZATIONS: OBRIGATÓRIO para que
+        Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS funcione.
+        Sem esta permissão declarada, o Intent lança SecurityException silenciosa
+        e a tela de isenção de bateria nunca abre — tanto no relógio (paciente)
+        quanto no celular (cuidador).
+    -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
     <!-- ── Chamada telefônica ─────────────────────────────────────────────────── -->
     <uses-permission android:name="android.permission.CALL_PHONE" />
 
