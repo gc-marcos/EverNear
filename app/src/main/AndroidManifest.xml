@@ -103,6 +103,7 @@
         <activity
             android:name=".PatientActivity"
             android:exported="false"
+            android:excludeFromRecents="true"
             android:theme="@style/Theme.AppCompat.DayNight.NoActionBar" />
 
         <!-- Dashboard do paciente: exibe código de sincronização -->
@@ -158,6 +159,25 @@
             android:exported="false"
             android:foregroundServiceType="dataSync"
             android:stopWithTask="false" />
+
+        <!--
+            Receptor de mensagens FCM (Firebase Cloud Messaging).
+            Responsável por:
+              1. Receber mensagens WAKE_UP enviadas pela Cloud Function "acordarPacientes"
+                 e iniciar o HeartRateService quando o processo estiver morto.
+              2. Salvar o token FCM no Firestore sempre que o SDK o renovar (onNewToken),
+                 garantindo que a Cloud Function sempre tenha o endereço FCM atualizado.
+
+            exported="false": o FCM SDK é quem despacha para este serviço via Intent
+            explícito — não precisa ser exportado para outros apps.
+        -->
+        <service
+            android:name=".EverNearMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
 
         <!--
             Receptor de boot — reinicia o serviço correto quando o dispositivo é ligado.

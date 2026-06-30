@@ -10,12 +10,13 @@ import android.content.Context;
 import android.content.Intent;
 import android.os.Build;
 import android.os.Handler;
+import android.os.HandlerThread;
 import android.os.IBinder;
-import android.os.Looper;
 import android.os.PowerManager;
 import android.os.SystemClock;
 import android.util.Log;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
 
@@ -33,12 +34,20 @@ import java.util.List;
  * ┌─ Por que funciona com tela apagada e app fechado? ─────────────────────────┐
  * │  1. Foreground Service: Android não encerra processos em primeiro plano.   │
  * │  2. WakeLock (PARTIAL): mantém CPU ativa mesmo com tela apagada.          │
- * │     Renovado periodicamente para evitar encerramento por OEMs.             │
+ * │     Renovado periodicamente via serviceBackgroundHandler.                  │
  * │  3. START_STICKY: Android reinicia o serviço após encerramento forçado.   │
  * │  4. onTaskRemoved + AlarmManager.setExactAndAllowWhileIdle: reinicia em   │
  * │     10 s mesmo durante Doze (tela apagada).                                │
  * │  5. BootReceiver: reinicia quando o relógio é ligado.                     │
  * │  6. HeartRateMonitor: SENSOR_DELAY_FASTEST + thread FOREGROUND.           │
+ * └────────────────────────────────────────────────────────────────────────────┘
+ *
+ * ┌─ Thread única para tarefas periódicas do serviço ──────────────────────────┐
+ * │  serviceBackgroundHandler corre no EverNear-ServiceThread (HandlerThread). │
+ * │  Concentra: renovação do WakeLock + watchdog de leituras do sensor.        │
+ * │  Usar o main looper para esses Runnables seria problemático em Wear OS     │
+ * │  pois o sistema pode suspender entrega de mensagens ao main looper quando  │
+ * │  a tela fica apagada por longos períodos.                                  │
  * └────────────────────────────────────────────────────────────────────────────┘
  *
  * ┌─ Três níveis de recuperação ───────────────────────────────────────────────┐
@@ -81,24 +90,44 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
 
     // ── WakeLock ──────────────────────────────────────────────────────────────
     private static final String WAKELOCK_TAG        = "EverNear:HeartRateWakeLock";
-    /** Renovação periódica — alguns OEMs encerram WakeLocks antigos. */
-    private static final long   WAKELOCK_RENEWAL_MS = 9 * 60 * 1000L;
+    /**
+     * Intervalo de renovação do WakeLock.
+     * Alguns OEMs (Xiaomi, Huawei, Samsung agressivo) encerram WakeLocks
+     * mantidos por longo período. A renovação a cada 9 min mantém a CPU ativa.
+     */
+    private static final long WAKELOCK_RENEWAL_MS   = 9 * 60 * 1000L;
 
     // ── Watchdog do serviço ────────────────────────────────────────────────────
     /** Intervalo de verificação do watchdog do serviço. */
-    private static final long SERVICE_WATCHDOG_INTERVAL_MS = 2 * 60_000L;   // 2 min
+    private static final long SERVICE_WATCHDOG_INTERVAL_MS = 2 * 60_000L;
     /**
      * Ausência de leituras além deste tempo aciona reinicialização do monitor.
-     * Deve ser maior que o tempo do watchdog do monitor em modo lento:
-     * 3 retentativas normais (30s) + transição + 1ª tentativa lenta (60s) = ~3 min.
+     * Deve ser maior que o tempo do watchdog interno em modo lento:
+     * 3 tentativas rápidas (30s cada) + transição + 1ª tentativa lenta (60s) ≈ 3 min.
      */
-    private static final long SERVICE_WATCHDOG_TIMEOUT_MS  = 5 * 60_000L;   // 5 min
+    private static final long SERVICE_WATCHDOG_TIMEOUT_MS  = 5 * 60_000L;
     /** Máximo de reinicializações do HeartRateMonitor antes de reiniciar o serviço. */
     private static final int  MAX_MONITOR_RESTARTS          = 3;
 
+    // ── Watchdog externo (AlarmManager) ───────────────────────────────────────
+    /**
+     * Intervalo do watchdog externo: 5 min.
+     * Deve ser maior que SERVICE_WATCHDOG_TIMEOUT_MS (5 min) + margem para que
+     * o watchdog interno tenha a chance de agir antes do AlarmManager disparar.
+     * Na prática, se o processo sobreviver, o alarme é cancelado e reagendado;
+     * se o processo for morto, o AlarmManager reinicia o serviço automaticamente.
+     */
+    private static final long WATCHDOG_EXTERNO_INTERVAL_MS  = 5 * 60_000L;
+    /**
+     * RequestCode fixo para o PendingIntent do watchdog externo.
+     * Usar o mesmo código garante que setExactAndAllowWhileIdle() sempre
+     * atualize o mesmo alarme em vez de criar múltiplos alarmes duplicados.
+     */
+    private static final int  WATCHDOG_EXTERNO_REQUEST_CODE = 100;
+
     // ── Throttle de atualizações ──────────────────────────────────────────────
     private static final long NOTIF_UPDATE_INTERVAL_MS     = 3_000L;
-    /** 10 s em produção: reduz consumo de bateria e cota do Firestore. */
+    /** 10 s: reduz consumo de bateria e cota de gravações do Firestore. */
     private static final long FIRESTORE_UPDATE_INTERVAL_MS = 10_000L;
 
     // ── Estado estático ───────────────────────────────────────────────────────
@@ -106,13 +135,17 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
     private static WeakReference<HeartRateMonitor.Listener> activityListenerRef;
 
     // ── Estado da instância ───────────────────────────────────────────────────
-    private HeartRateMonitor    monitor;
-    private NotificationManager notifManager;
+    private HeartRateMonitor      monitor;
+    private NotificationManager   notifManager;
     private PowerManager.WakeLock wakeLock;
 
-    // Handlers no main looper (seguro com WakeLock ativo)
-    private final Handler wakeLockRenewalHandler  = new Handler(Looper.getMainLooper());
-    private final Handler serviceWatchdogHandler  = new Handler(Looper.getMainLooper());
+    /**
+     * HandlerThread dedicado para tarefas periódicas do serviço.
+     * Concentra renovação do WakeLock e watchdog de leituras numa única thread
+     * de background, evitando sobrecarregar o main looper.
+     */
+    private HandlerThread serviceLifecycleThread;
+    private Handler       serviceBackgroundHandler;
 
     // Dados do paciente
     private String               uidPaciente;
@@ -122,12 +155,12 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
     private boolean              monitorIniciado      = false;
 
     // ── Watchdog do serviço — estado ──────────────────────────────────────────
-    /** Timestamp da última leitura recebida via onHeartRate(). */
+    /** Timestamp da última leitura recebida via onHeartRate(). Atualizado em bgThread. */
     private volatile long lastHeartRateReceivedTime = System.currentTimeMillis();
     /** Quantas vezes o monitor foi reiniciado nesta sessão do serviço. */
     private int monitorRestartCount = 0;
 
-    // Throttle
+    // Throttle de atualizações
     private long lastNotifUpdate     = 0;
     private long lastFirestoreUpdate = 0;
 
@@ -152,8 +185,16 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
         instance     = this;
         notifManager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         criarCanalNotificacao();
+
+        // Cria thread dedicada para as tarefas periódicas do serviço
+        serviceLifecycleThread = new HandlerThread("EverNear-ServiceThread",
+                android.os.Process.THREAD_PRIORITY_FOREGROUND);
+        serviceLifecycleThread.start();
+        serviceBackgroundHandler = new Handler(serviceLifecycleThread.getLooper());
+
         adquirirWakeLock();
         agendarRenovacaoWakeLock();
+        agendarWatchdogExterno();
     }
 
     @Override
@@ -186,15 +227,21 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
             }
         }
 
-        startForeground(NOTIF_ID, buildNotification("Iniciando monitoramento...", "--"));
+        startForeground(NOTIF_ID, buildNotification("Monitorando em segundo plano", "--"));
         carregarDadosPaciente();
         return START_STICKY;
     }
 
     @Override
     public void onDestroy() {
-        wakeLockRenewalHandler.removeCallbacksAndMessages(null);
-        serviceWatchdogHandler.removeCallbacksAndMessages(null);
+        if (serviceBackgroundHandler != null) {
+            serviceBackgroundHandler.removeCallbacksAndMessages(null);
+        }
+        if (serviceLifecycleThread != null) {
+            serviceLifecycleThread.quitSafely();
+            serviceLifecycleThread = null;
+        }
+        cancelarWatchdogExterno();
         if (pacienteDataListener != null) pacienteDataListener.remove();
         if (monitor != null) monitor.parar();
         liberarWakeLock();
@@ -254,12 +301,11 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
     }
 
     /**
-     * Renova o WakeLock a cada 9 min.
-     * Alguns OEMs (Xiaomi, Huawei, Samsung agressivo) encerram WakeLocks
-     * mantidos por muito tempo. A renovação garante CPU ativa indefinidamente.
+     * Renova o WakeLock periodicamente via serviceBackgroundHandler.
+     * Executado no EverNear-ServiceThread — não bloqueia o main looper.
      */
     private void agendarRenovacaoWakeLock() {
-        wakeLockRenewalHandler.postDelayed(new Runnable() {
+        serviceBackgroundHandler.postDelayed(new Runnable() {
             @Override
             public void run() {
                 try {
@@ -276,7 +322,7 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
                 } catch (Exception e) {
                     Log.w(TAG, "Erro ao renovar WakeLock: " + e.getMessage());
                 }
-                wakeLockRenewalHandler.postDelayed(this, WAKELOCK_RENEWAL_MS);
+                serviceBackgroundHandler.postDelayed(this, WAKELOCK_RENEWAL_MS);
             }
         }, WAKELOCK_RENEWAL_MS);
     }
@@ -285,9 +331,32 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
 
     private void carregarDadosPaciente() {
         FirebaseAuth auth = FirebaseAuth.getInstance();
+
+        // Quando o processo foi morto pelo OEM e o FCM o acorda, o Firebase Auth
+        // pode ainda estar restaurando seu estado persistido do disco.
+        // getCurrentUser() é síncrono e retorna null nessa janela transitória,
+        // causando stopSelf() prematuro mesmo com o usuário logado.
+        //
+        // addAuthStateListener dispara:
+        //   - IMEDIATAMENTE se o Auth já foi restaurado (caso normal)
+        //   - Assim que for restaurado do disco (caso pós-kill por OEM)
+        // Elimina a race condition sem polling nem sleep.
         if (auth.getCurrentUser() == null) {
-            Log.w(TAG, "Sem usuário autenticado — encerrando serviço");
-            stopSelf();
+            Log.w(TAG, "Auth ainda não restaurada após reinício do processo "
+                    + "— aguardando via AuthStateListener");
+            auth.addAuthStateListener(new FirebaseAuth.AuthStateListener() {
+                @Override
+                public void onAuthStateChanged(@NonNull FirebaseAuth fa) {
+                    fa.removeAuthStateListener(this); // dispara uma única vez
+                    if (fa.getCurrentUser() != null) {
+                        Log.d(TAG, "Auth restaurada — continuando carregarDadosPaciente()");
+                        carregarDadosPaciente();
+                    } else {
+                        Log.w(TAG, "Usuário não autenticado após restauração — encerrando serviço");
+                        stopSelf();
+                    }
+                }
+            });
             return;
         }
 
@@ -328,14 +397,18 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
         monitor.iniciar();
         if (uidPaciente != null) {
             FirebaseHelper.salvarStatusMonitoramento(uidPaciente, "ATIVO");
+            // Garante que o token FCM está atualizado no Firestore para que a Cloud Function
+            // "acordarPacientes" consiga enviar mensagens WAKE_UP para este dispositivo.
+            // Cobre casos em que onNewToken() falhou (sem rede) ou ocorreu antes do login.
+            FirebaseHelper.sincronizarFcmToken(uidPaciente);
         }
-        // Inicia watchdog do serviço para detectar falhas que o monitor não conseguiu resolver
         iniciarWatchdogServico();
         Log.d(TAG, "Monitor cardíaco iniciado");
     }
 
     private void pararServico() {
-        serviceWatchdogHandler.removeCallbacksAndMessages(null);
+        serviceBackgroundHandler.removeCallbacksAndMessages(null);
+        cancelarWatchdogExterno();
         if (uidPaciente != null) {
             FirebaseHelper.salvarStatusMonitoramento(uidPaciente, "PARADO");
         }
@@ -349,18 +422,22 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
     /**
      * Watchdog em nível de serviço — complementa o watchdog interno do HeartRateMonitor.
      *
-     * Executa a cada SERVICE_WATCHDOG_INTERVAL_MS (2 min) usando Handler no main looper.
-     * Confiável porque o WakeLock mantém a CPU ativa e o main looper sempre processando.
+     * Executado no EverNear-ServiceThread via serviceBackgroundHandler.
+     * Verifica a cada SERVICE_WATCHDOG_INTERVAL_MS (2 min) se chegaram leituras.
+     * O WakeLock mantém a CPU ativa e o HandlerThread processando normalmente.
      *
-     * Se não chegou nenhuma leitura de BPM em SERVICE_WATCHDOG_TIMEOUT_MS (5 min):
+     * Se não chegou nenhuma leitura em SERVICE_WATCHDOG_TIMEOUT_MS (5 min):
      *  - Nível 2: reinicia o HeartRateMonitor (até MAX_MONITOR_RESTARTS vezes)
-     *  - Nível 3: reinicia o próprio serviço via stopSelf() + AlarmManager de segurança
+     *  - Nível 3: reinicia o próprio serviço via stopSelf() + AlarmManager
      */
     private void iniciarWatchdogServico() {
-        // Cancela ciclo anterior antes de iniciar novo (evita duplicatas após reinício)
-        serviceWatchdogHandler.removeCallbacksAndMessages(null);
+        // Cancela ciclo anterior para evitar múltiplos runnables após reinício do monitor
+        serviceBackgroundHandler.removeCallbacksAndMessages(null);
 
-        serviceWatchdogHandler.postDelayed(new Runnable() {
+        // Reposta o Runnable de renovação do WakeLock (removido acima junto com os outros)
+        agendarRenovacaoWakeLock();
+
+        serviceBackgroundHandler.postDelayed(new Runnable() {
             @Override
             public void run() {
                 long silencio = System.currentTimeMillis() - lastHeartRateReceivedTime;
@@ -373,24 +450,28 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
                     reiniciarMonitor();
                 }
 
-                // Reagenda indefinidamente — só para em pararServico() / onDestroy()
-                serviceWatchdogHandler.postDelayed(this, SERVICE_WATCHDOG_INTERVAL_MS);
+                // Reagenda indefinidamente — cancela apenas em pararServico() / onDestroy()
+                serviceBackgroundHandler.postDelayed(this, SERVICE_WATCHDOG_INTERVAL_MS);
             }
         }, SERVICE_WATCHDOG_INTERVAL_MS);
 
-        Log.d(TAG, "Watchdog do serviço iniciado (verificação a cada "
+        Log.d(TAG, "Watchdog do serviço iniciado (verificação="
                 + SERVICE_WATCHDOG_INTERVAL_MS / 1000 + "s, timeout="
                 + SERVICE_WATCHDOG_TIMEOUT_MS / 1000 + "s)");
     }
 
     /**
-     * Reinicia o HeartRateMonitor completamente (destrói e recria).
+     * Reinicia o HeartRateMonitor completamente (para + recria).
      *
      * Chamado em dois cenários:
      *  a) onNecessarioReiniciar() — watchdog interno do monitor esgotado
      *  b) Watchdog do serviço — 5 min sem leituras detectado externamente
      *
-     * Após MAX_MONITOR_RESTARTS tentativas frustradas, reinicia o próprio serviço.
+     * Após MAX_MONITOR_RESTARTS tentativas, reinicia o próprio serviço.
+     *
+     * ATENÇÃO: este método é chamado a partir do serviceBackgroundHandler (bgThread).
+     * Operações que exigem main thread (UI, alguns métodos Firebase) devem usar
+     * Handler(Looper.getMainLooper()).post() se necessário.
      */
     private void reiniciarMonitor() {
         monitorRestartCount++;
@@ -399,14 +480,14 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
             Log.e(TAG, "Máximo de reinicializações do monitor atingido ("
                     + MAX_MONITOR_RESTARTS + ") → reiniciando o próprio serviço");
             agendarReinicioPorSeguranca();
-            stopSelf(); // START_STICKY vai recriar o serviço
+            stopSelf(); // START_STICKY recriar o serviço em seguida
             return;
         }
 
         Log.w(TAG, "Reiniciando HeartRateMonitor (tentativa "
                 + monitorRestartCount + "/" + MAX_MONITOR_RESTARTS + ")");
 
-        // Para o monitor atual (cancela watchdog interno via bgHandler.removeCallbacks)
+        // Para o monitor atual — cancela watchdog interno via bgHandler.removeCallbacks
         if (monitor != null) {
             monitor.parar();
             monitor = null;
@@ -424,7 +505,75 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
         if (uidPaciente != null) {
             FirebaseHelper.salvarStatusMonitoramento(uidPaciente, "RECONECTANDO");
         }
+
+        // Reagenda o watchdog externo para cobrir o novo ciclo do monitor
+        agendarWatchdogExterno();
+
         Log.i(TAG, "HeartRateMonitor recriado com sucesso");
+    }
+
+    // ==================== Watchdog externo (AlarmManager) ====================
+
+    /**
+     * Agenda (ou reagenda) o watchdog externo via AlarmManager.
+     *
+     * Por que isso é necessário?
+     * Os watchdogs internos (HeartRateMonitor) e de serviço (serviceBackgroundHandler)
+     * dependem do processo estar vivo. Em OEMs agressivos (Xiaomi MIUI, Huawei EMUI,
+     * Samsung com "Otimização de bateria") o sistema pode matar o processo inteiro
+     * mesmo com Foreground Service ativo. O AlarmManager sobrevive à morte do processo
+     * e instrui o sistema a reiniciar o HeartRateService via startForegroundService().
+     *
+     * Como funciona:
+     *  - O alarme é agendado para disparar em WATCHDOG_EXTERNO_INTERVAL_MS (5 min).
+     *  - Se o serviço estiver vivo, onStartCommand() é chamado novamente: o alarme é
+     *    cancelado em pararServico() ou reagendado em reiniciarMonitor(), garantindo
+     *    que o próximo ciclo comece do zero.
+     *  - Se o processo foi morto: o AlarmManager dispara, o sistema reinicia o serviço,
+     *    e onCreate() agenda novo watchdog automaticamente.
+     *
+     * RequestCode fixo (WATCHDOG_EXTERNO_REQUEST_CODE = 100) + FLAG_UPDATE_CURRENT:
+     * garante que sempre existe no máximo um alarme pendente para este serviço.
+     */
+    private void agendarWatchdogExterno() {
+        AlarmManager am = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
+        if (am == null) return;
+
+        PendingIntent pi = PendingIntent.getForegroundService(
+                this,
+                WATCHDOG_EXTERNO_REQUEST_CODE,
+                new Intent(this, HeartRateService.class),
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+
+        am.setExactAndAllowWhileIdle(
+                AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                SystemClock.elapsedRealtime() + WATCHDOG_EXTERNO_INTERVAL_MS,
+                pi);
+
+        Log.d(TAG, "Watchdog externo agendado em "
+                + WATCHDOG_EXTERNO_INTERVAL_MS / 60_000 + " min");
+    }
+
+    /**
+     * Cancela o alarme do watchdog externo.
+     *
+     * Deve ser chamado sempre que o monitoramento for encerrado intencionalmente
+     * (pararServico, onDestroy), para não deixar alarmes "soltos" que reiniciariam
+     * o serviço sem necessidade após o usuário parar o monitoramento de propósito.
+     */
+    private void cancelarWatchdogExterno() {
+        AlarmManager am = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
+        if (am == null) return;
+
+        PendingIntent pi = PendingIntent.getForegroundService(
+                this,
+                WATCHDOG_EXTERNO_REQUEST_CODE,
+                new Intent(this, HeartRateService.class),
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+
+        am.cancel(pi);
+        pi.cancel();
+        Log.d(TAG, "Watchdog externo cancelado");
     }
 
     /**
@@ -448,7 +597,7 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
 
     @Override
     public void onHeartRate(int bpm) {
-        // Atualiza timestamp e reseta contador de reinicializações — sensor funcionando
+        // Atualiza timestamp — sensor funcionando, reseta contador de reinicializações
         lastHeartRateReceivedTime = System.currentTimeMillis();
         if (monitorRestartCount > 0) {
             Log.i(TAG, "Leitura recebida após reinicialização — resetando contador");
@@ -514,7 +663,8 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
             FirebaseHelper.salvarBaseline(uidPaciente, baseline, min, max,
                     new FirebaseHelper.Callback<Void>() {
                         @Override public void onResult(Void v) {
-                            Log.d(TAG, "Baseline: " + baseline + " [" + min + "-" + max + "]");
+                            Log.d(TAG, "Baseline salvo: " + baseline
+                                    + " [" + min + "-" + max + "]");
                         }
                         @Override public void onError(Exception e) {
                             Log.e(TAG, "Falha ao salvar baseline: " + e.getMessage());
@@ -526,7 +676,7 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
     }
 
     /**
-     * Hardware TYPE_HEART_RATE ausente — encerra o serviço.
+     * Hardware TYPE_HEART_RATE ausente — encerra o serviço definitivamente.
      * Não é chamado por silêncio temporário (tratado pelos watchdogs).
      */
     @Override
@@ -543,7 +693,7 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
 
     /**
      * Watchdog interno do HeartRateMonitor esgotou todos os níveis de recuperação.
-     * Reinicia o monitor completamente (Nível 2 de recuperação).
+     * Reinicia o monitor completamente (Nível 2 de recuperação do serviço).
      */
     @Override
     public void onNecessarioReiniciar() {
@@ -559,8 +709,8 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
      * Envia alerta ao cuidador e agenda escalada via AlarmManager se houver próximo.
      *
      * AlarmManager.setExactAndAllowWhileIdle() dispara mesmo durante Doze,
-     * garantindo que o cuidador seguinte seja notificado após exatamente 5 min
-     * independentemente do estado de energia do dispositivo.
+     * garantindo que o cuidador seguinte seja notificado após 5 min independentemente
+     * do estado de energia do dispositivo.
      */
     private void enviarAlertaParaCuidador(int indice, int bpm, String tipo) {
         if (indice >= cuidadoresVinculados.size()) {
@@ -651,11 +801,12 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
             String uid = cuidadoresVinculados.get(i);
             if (uid == null || uid.isEmpty() || uid.equals(uidPaciente)) continue;
 
-            final String uidFinal = uid;
+            final String uidFinal    = uid;
             final int    indiceFinal = i;
 
             FirebaseHelper.enviarAlerta(
-                    uidPaciente, nomePaciente, uidFinal, bpm, "MANUAL", indiceFinal, bpmMin, bpmMax,
+                    uidPaciente, nomePaciente, uidFinal, bpm,
+                    "MANUAL", indiceFinal, bpmMin, bpmMax,
                     new FirebaseHelper.Callback<String>() {
                         @Override public void onResult(String id) {
                             Log.d(TAG, "Emergência → cuidador[" + indiceFinal + "]: " + uidFinal);
@@ -698,6 +849,13 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
         }
     }
 
+    /**
+     * Notificação persistente do Foreground Service (prioridade LOW — silenciosa).
+     * Exibida na barra de status enquanto o monitoramento estiver ativo.
+     *
+     * @param status texto de status (ex: "Normal", "Reconectando sensor...")
+     * @param bpm    valor BPM como string, ou "--" quando indisponível
+     */
     private Notification buildNotification(String status, String bpm) {
         Intent openApp = new Intent(this, PatientActivity.class);
         openApp.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
@@ -715,6 +873,10 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
                 .build();
     }
 
+    /**
+     * Notificação de alerta de emergência (prioridade MAX — interrompe e toca som).
+     * Usa canal separado com bypass de Não Perturbe e tela cheia.
+     */
     private Notification buildAlertNotification(String titulo, String texto) {
         Intent openApp = new Intent(this, PatientActivity.class);
         openApp.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);

@@ -33,6 +33,7 @@ android {
 
 dependencies {
 
+    implementation(libs.firebase.messaging)
     implementation(libs.play.services.wearable)
     implementation(libs.appcompat)
     implementation(libs.material)

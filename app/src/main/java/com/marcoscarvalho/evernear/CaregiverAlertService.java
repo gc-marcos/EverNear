@@ -27,8 +27,11 @@ import com.google.firebase.firestore.DocumentChange;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.ListenerRegistration;
 
+import java.util.ArrayList;
+import java.util.Date;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
+import java.util.List;
 
 /**
  * Serviço em primeiro plano no dispositivo do CUIDADOR (celular/tablet).
@@ -84,6 +87,20 @@ public class CaregiverAlertService extends Service {
     /** Tempo de espera antes de tentar reconectar o SnapshotListener após erro. */
     private static final long RECONEXAO_DELAY_MS = 15_000L;
 
+    // ── Detecção de relógio morto ──────────────────────────────────────────────
+    /**
+     * Intervalo de verificação da presença do relógio.
+     * A cada 5 min o CaregiverAlertService verifica se o paciente enviou BPM
+     * recentemente. Se não enviou, solicita acordar o relógio via Firestore+FCM.
+     */
+    private static final long VERIFICACAO_RELOGIO_INTERVAL_MS = 5 * 60_000L;
+    /**
+     * Tempo máximo sem leitura de BPM antes de considerar o relógio morto.
+     * 6 min: maior que o intervalo de verificação (5 min) para evitar falsos positivos,
+     * mas menor que o tempo em que uma anomalia poderia passar sem detecção.
+     */
+    private static final long RELOGIO_MORTO_THRESHOLD_MS = 6 * 60_000L;
+
     // ── Estado estático ───────────────────────────────────────────────────────
     /** Referência estática para verificação rápida de disponibilidade. */
     private static CaregiverAlertService instance;
@@ -97,7 +114,19 @@ public class CaregiverAlertService extends Service {
     private final LinkedHashSet<String> alertasNotificados = new LinkedHashSet<>();
     /** Impede múltiplas tentativas de reconexão simultâneas. */
     private boolean reconectando = false;
-    private final Handler reconexaoHandler = new Handler(Looper.getMainLooper());
+    private final Handler reconexaoHandler  = new Handler(Looper.getMainLooper());
+
+    // ── Detecção de relógio morto — estado ────────────────────────────────────
+    /**
+     * Lista de UIDs de pacientes vinculados a este cuidador.
+     * Preenchida pelo listener do documento do cuidador no Firestore.
+     * Usada pela verificação periódica de presença do relógio.
+     */
+    private List<String>        pacientesVinculados  = new ArrayList<>();
+    /** Listener no documento do cuidador para manter pacientesVinculados atualizado. */
+    private ListenerRegistration cuidadorDadosListener;
+    /** Handler para agendar a verificação periódica de presença do relógio. */
+    private final Handler verificacaoHandler = new Handler(Looper.getMainLooper());
 
     // ==================== API estática ====================
 
@@ -171,7 +200,8 @@ public class CaregiverAlertService extends Service {
         persistirEstado(true);
 
         startForeground(NOTIF_ID_FG, buildFgNotification());
-        ouvirAlertas(); // garante listener único
+        ouvirAlertas();               // garante listener único
+        monitorarPacientesVinculados(); // detecta relógio morto → acorda via FCM
 
         Log.i(TAG, "Serviço ativo — ouvindo alertas para cuidador: " + uidCuidador);
         return START_STICKY;
@@ -181,7 +211,12 @@ public class CaregiverAlertService extends Service {
     public void onDestroy() {
         Log.d(TAG, "Serviço destruído");
         reconexaoHandler.removeCallbacksAndMessages(null);
+        verificacaoHandler.removeCallbacksAndMessages(null);
         removerListener();
+        if (cuidadorDadosListener != null) {
+            cuidadorDadosListener.remove();
+            cuidadorDadosListener = null;
+        }
         persistirEstado(false);
         instance = null;
         super.onDestroy();
@@ -212,6 +247,129 @@ public class CaregiverAlertService extends Service {
     @Nullable
     @Override
     public IBinder onBind(Intent intent) { return null; }
+
+    // ==================== Detecção de relógio morto ====================
+
+    /**
+     * Monitora os pacientes vinculados a este cuidador e detecta quando o relógio
+     * está morto (sem enviar BPM por mais de RELOGIO_MORTO_THRESHOLD_MS).
+     *
+     * Por que o cuidador faz isso e não um Cloud Scheduler?
+     * O cuidador já conhece o UID do paciente (via pacientesVinculados, que foi
+     * populado pelo codigoVinculo na vinculação). Um Scheduler acordaria TODOS os
+     * relógios de 5 em 5 min — desperdício de bateria. O cuidador só solicita
+     * acordar quando detectou especificamente que aquele relógio está sem resposta.
+     *
+     * Fluxo:
+     *  1. Snapshot listener em users/{uidCuidador} mantém pacientesVinculados atualizado.
+     *  2. A cada VERIFICACAO_RELOGIO_INTERVAL_MS (5 min), lê ultimoBpmTimestamp de cada
+     *     paciente com uma única chamada .get() (não snapshot — evita listeners extras).
+     *  3. Se o timestamp for mais antigo que RELOGIO_MORTO_THRESHOLD_MS (6 min):
+     *     chama FirebaseHelper.solicitarWakeUpPaciente() que escreve "solicitarWakeUp"
+     *     no documento do paciente.
+     *  4. A Cloud Function "acordarPaciente" detecta o campo e envia FCM ao relógio.
+     */
+    private void monitorarPacientesVinculados() {
+        if (uidCuidador == null) return;
+
+        // Remove listener anterior para garantir unicidade
+        if (cuidadorDadosListener != null) {
+            cuidadorDadosListener.remove();
+        }
+
+        Log.d(TAG, "Iniciando monitor de pacientes vinculados para cuidador: " + uidCuidador);
+
+        cuidadorDadosListener = FirebaseFirestore.getInstance()
+                .collection("users").document(uidCuidador)
+                .addSnapshotListener((doc, e) -> {
+                    if (e != null) {
+                        Log.w(TAG, "Erro ao ouvir dados do cuidador: " + e.getMessage());
+                        return;
+                    }
+                    if (doc == null || !doc.exists()) return;
+
+                    @SuppressWarnings("unchecked")
+                    List<String> lista = (List<String>) doc.get("pacientesVinculados");
+                    pacientesVinculados = (lista != null) ? new ArrayList<>(lista) : new ArrayList<>();
+
+                    Log.d(TAG, "Pacientes vinculados atualizados: " + pacientesVinculados.size());
+
+                    // Agenda (ou reag.) a verificação periódica toda vez que a lista muda
+                    verificacaoHandler.removeCallbacksAndMessages(null);
+                    agendarVerificacaoPresenca();
+                });
+    }
+
+    /**
+     * Agenda a verificação periódica de presença do relógio.
+     * Executa imediatamente uma primeira verificação e reagenda a cada
+     * VERIFICACAO_RELOGIO_INTERVAL_MS (5 min) enquanto o serviço estiver ativo.
+     */
+    private void agendarVerificacaoPresenca() {
+        verificacaoHandler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                verificarPresencaRelogio();
+                verificacaoHandler.postDelayed(this, VERIFICACAO_RELOGIO_INTERVAL_MS);
+            }
+        }, VERIFICACAO_RELOGIO_INTERVAL_MS);
+
+        Log.d(TAG, "Verificação de presença agendada a cada "
+                + VERIFICACAO_RELOGIO_INTERVAL_MS / 60_000 + " min");
+    }
+
+    /**
+     * Para cada paciente vinculado, lê seu ultimoBpmTimestamp e verifica se o relógio
+     * está enviando sinais. Se estiver morto, solicita wake-up via Firestore.
+     *
+     * Usa .get() (leitura única) em vez de snapshot listener para cada paciente,
+     * evitando multiplicar conexões abertas quando o cuidador tem vários pacientes.
+     */
+    private void verificarPresencaRelogio() {
+        if (pacientesVinculados.isEmpty()) {
+            Log.d(TAG, "Verificação de presença: sem pacientes vinculados");
+            return;
+        }
+
+        Log.d(TAG, "Verificando presença do relógio para "
+                + pacientesVinculados.size() + " paciente(s)");
+
+        for (String uidPaciente : pacientesVinculados) {
+            if (uidPaciente == null || uidPaciente.isEmpty()) continue;
+
+            FirebaseFirestore.getInstance()
+                    .collection("users").document(uidPaciente)
+                    .get()
+                    .addOnSuccessListener(doc -> {
+                        if (doc == null || !doc.exists()) return;
+
+                        String nome      = doc.getString("nome");
+                        String nomeLog   = (nome != null) ? nome : uidPaciente;
+                        Date   timestamp = doc.getDate("ultimoBpmTimestamp");
+
+                        if (timestamp == null) {
+                            // Relógio nunca enviou BPM — pode ser primeiro uso; não acorda ainda
+                            Log.d(TAG, "Paciente " + nomeLog + ": sem ultimoBpmTimestamp — ignorando");
+                            return;
+                        }
+
+                        long silencio = System.currentTimeMillis() - timestamp.getTime();
+
+                        if (silencio > RELOGIO_MORTO_THRESHOLD_MS) {
+                            Log.w(TAG, "Relógio morto detectado — paciente=" + nomeLog
+                                    + " silêncio=" + (silencio / 1000) + "s"
+                                    + " → solicitando wake-up via Firestore+FCM");
+                            FirebaseHelper.solicitarWakeUpPaciente(uidPaciente);
+                        } else {
+                            Log.d(TAG, "Relógio ativo — paciente=" + nomeLog
+                                    + " último BPM há " + (silencio / 1000) + "s");
+                        }
+                    })
+                    .addOnFailureListener(e ->
+                            Log.w(TAG, "Falha ao ler dados do paciente "
+                                    + uidPaciente + ": " + e.getMessage()));
+        }
+    }
 
     // ==================== Listener de alertas ====================
 
@@ -325,7 +483,7 @@ public class CaregiverAlertService extends Service {
         // Valores seguros com fallback para evitar NPE
         int    bpm         = bpmLong    != null ? bpmLong.intValue()    : 0;
         String nomeSeguro  = (pacienteNome != null && !pacienteNome.isEmpty())
-                             ? pacienteNome : "Paciente";
+                ? pacienteNome : "Paciente";
         String tipoSeguro  = (tipo != null && !tipo.isEmpty()) ? tipo : "UNKNOWN";
 
         Log.i(TAG, "Novo alerta — id=" + alertaId
@@ -348,7 +506,7 @@ public class CaregiverAlertService extends Service {
      * Se não encontrar (ou ocorrer erro), exibe a notificação sem os limites.
      */
     private void buscarLimitesENotificar(String alertaId, String pacienteId,
-                                          String pacienteNome, int bpm, String tipo) {
+                                         String pacienteNome, int bpm, String tipo) {
         if (pacienteId == null || pacienteId.isEmpty()) {
             Log.w(TAG, "pacienteId nulo — exibindo notificação sem limites");
             exibirNotificacaoAlerta(alertaId, pacienteId, pacienteNome, bpm, tipo, -1, -1);
@@ -522,8 +680,8 @@ public class CaregiverAlertService extends Service {
      * @param bpmMax      Limite máximo configurado; -1 se desconhecido
      */
     private void exibirNotificacaoAlerta(String alertaId, String pacienteId,
-                                          String pacienteNome, int bpm,
-                                          String tipo, int bpmMin, int bpmMax) {
+                                         String pacienteNome, int bpm,
+                                         String tipo, int bpmMin, int bpmMax) {
         boolean isEmergencia = "MANUAL".equals(tipo);
         boolean isHigh       = "HIGH".equals(tipo);
 

@@ -98,7 +98,7 @@ public class FirebaseHelper {
     }
 
     private static void gerarESalvarCodigoUnico(String uid, int tentativa,
-                                                 Callback<String> callback) {
+                                                Callback<String> callback) {
         if (tentativa >= MAX_TENTATIVAS_CODIGO) {
             callback.onError(new Exception(
                     "Não foi possível gerar código único após " + MAX_TENTATIVAS_CODIGO + " tentativas"));
@@ -137,8 +137,8 @@ public class FirebaseHelper {
      * @param telefone número do paciente — null para cuidadores
      */
     public static void salvarUsuario(String uid, String nome, String email,
-                                      String tipo, String telefone,
-                                      Callback<String> callback) {
+                                     String tipo, String telefone,
+                                     Callback<String> callback) {
         Map<String, Object> user = new HashMap<>();
         user.put("nome", nome);
         user.put("email", email);
@@ -202,51 +202,51 @@ public class FirebaseHelper {
      * @param uidPaciente UID do paciente encontrado pelo código
      */
     public static void vincularPacienteCuidador(String uidCuidador, String uidPaciente,
-                                                 Callback<Void> callback) {
+                                                Callback<Void> callback) {
         DocumentReference refCuidador = db.collection("users").document(uidCuidador);
         DocumentReference refPaciente = db.collection("users").document(uidPaciente);
 
         db.runTransaction(transaction -> {
-            DocumentSnapshot snapCuidador = transaction.get(refCuidador);
-            DocumentSnapshot snapPaciente = transaction.get(refPaciente);
+                    DocumentSnapshot snapCuidador = transaction.get(refCuidador);
+                    DocumentSnapshot snapPaciente = transaction.get(refPaciente);
 
-            @SuppressWarnings("unchecked")
-            List<String> pacsCuidador  = (List<String>) snapCuidador.get("pacientesVinculados");
-            @SuppressWarnings("unchecked")
-            List<String> cuidsPaciente = (List<String>) snapPaciente.get("cuidadoresVinculados");
+                    @SuppressWarnings("unchecked")
+                    List<String> pacsCuidador  = (List<String>) snapCuidador.get("pacientesVinculados");
+                    @SuppressWarnings("unchecked")
+                    List<String> cuidsPaciente = (List<String>) snapPaciente.get("cuidadoresVinculados");
 
-            int totalPacs  = pacsCuidador  != null ? pacsCuidador.size()  : 0;
-            int totalCuids = cuidsPaciente != null ? cuidsPaciente.size() : 0;
+                    int totalPacs  = pacsCuidador  != null ? pacsCuidador.size()  : 0;
+                    int totalCuids = cuidsPaciente != null ? cuidsPaciente.size() : 0;
 
-            if (totalPacs >= MAX_PACIENTES_POR_CUIDADOR) {
-                throw new FirebaseFirestoreException(
-                        "LIMITE_CUIDADOR", FirebaseFirestoreException.Code.ABORTED);
-            }
-            if (totalCuids >= MAX_CUIDADORES_POR_PACIENTE) {
-                throw new FirebaseFirestoreException(
-                        "LIMITE_PACIENTE", FirebaseFirestoreException.Code.ABORTED);
-            }
-            if (cuidsPaciente != null && cuidsPaciente.contains(uidCuidador)) {
-                throw new FirebaseFirestoreException(
-                        "JA_VINCULADO", FirebaseFirestoreException.Code.ABORTED);
-            }
+                    if (totalPacs >= MAX_PACIENTES_POR_CUIDADOR) {
+                        throw new FirebaseFirestoreException(
+                                "LIMITE_CUIDADOR", FirebaseFirestoreException.Code.ABORTED);
+                    }
+                    if (totalCuids >= MAX_CUIDADORES_POR_PACIENTE) {
+                        throw new FirebaseFirestoreException(
+                                "LIMITE_PACIENTE", FirebaseFirestoreException.Code.ABORTED);
+                    }
+                    if (cuidsPaciente != null && cuidsPaciente.contains(uidCuidador)) {
+                        throw new FirebaseFirestoreException(
+                                "JA_VINCULADO", FirebaseFirestoreException.Code.ABORTED);
+                    }
 
-            // arrayUnion é idempotente e seguro mesmo se o campo ainda não existir
-            transaction.update(refCuidador, "pacientesVinculados",
-                    FieldValue.arrayUnion(uidPaciente));
-            transaction.update(refPaciente, "cuidadoresVinculados",
-                    FieldValue.arrayUnion(uidCuidador));
-            return null;
-        })
-        .addOnSuccessListener(unused -> {
-            Log.d(TAG, "Vinculação concluída: cuidador=" + uidCuidador
-                    + " paciente=" + uidPaciente);
-            callback.onResult(null);
-        })
-        .addOnFailureListener(e -> {
-            Log.w(TAG, "Falha na vinculação: " + e.getMessage());
-            callback.onError(e);
-        });
+                    // arrayUnion é idempotente e seguro mesmo se o campo ainda não existir
+                    transaction.update(refCuidador, "pacientesVinculados",
+                            FieldValue.arrayUnion(uidPaciente));
+                    transaction.update(refPaciente, "cuidadoresVinculados",
+                            FieldValue.arrayUnion(uidCuidador));
+                    return null;
+                })
+                .addOnSuccessListener(unused -> {
+                    Log.d(TAG, "Vinculação concluída: cuidador=" + uidCuidador
+                            + " paciente=" + uidPaciente);
+                    callback.onResult(null);
+                })
+                .addOnFailureListener(e -> {
+                    Log.w(TAG, "Falha na vinculação: " + e.getMessage());
+                    callback.onError(e);
+                });
     }
 
     // ==================== Monitoramento ====================
@@ -279,7 +279,7 @@ public class FirebaseHelper {
      * @param callback pode ser null se o chamador não precisar de confirmação
      */
     public static void salvarBaseline(String uidPaciente, int baseline, int min, int max,
-                                       Callback<Void> callback) {
+                                      Callback<Void> callback) {
         Map<String, Object> updates = new HashMap<>();
         updates.put("bpmBaseline", baseline);
         updates.put("bpmMin", min);
@@ -350,9 +350,9 @@ public class FirebaseHelper {
      * @param callback     retorna o ID do documento criado; usado pela lógica de escalada
      */
     public static void enviarAlerta(String uidPaciente, String nomePaciente,
-                                     String uidCuidador, int bpm, String tipo,
-                                     int prioridade, int bpmMin, int bpmMax,
-                                     Callback<String> callback) {
+                                    String uidCuidador, int bpm, String tipo,
+                                    int prioridade, int bpmMin, int bpmMax,
+                                    Callback<String> callback) {
         Map<String, Object> alerta = new HashMap<>();
         alerta.put("pacienteId",    uidPaciente);
         alerta.put("pacienteNome",  nomePaciente);
@@ -384,16 +384,16 @@ public class FirebaseHelper {
      * disponíveis (ex.: emergência manual acionada antes da calibração).
      */
     public static void enviarAlerta(String uidPaciente, String nomePaciente,
-                                     String uidCuidador, int bpm, String tipo,
-                                     int prioridade, Callback<String> callback) {
+                                    String uidCuidador, int bpm, String tipo,
+                                    int prioridade, Callback<String> callback) {
         enviarAlerta(uidPaciente, nomePaciente, uidCuidador, bpm, tipo,
                 prioridade, -1, -1, callback);
     }
 
     /** Sobrecarga para emergência manual: prioridade 0, sem limites de BPM. */
     public static void enviarAlerta(String uidPaciente, String nomePaciente,
-                                     String uidCuidador, int bpm, String tipo,
-                                     Callback<String> callback) {
+                                    String uidCuidador, int bpm, String tipo,
+                                    Callback<String> callback) {
         enviarAlerta(uidPaciente, nomePaciente, uidCuidador, bpm, tipo,
                 0, -1, -1, callback);
     }
@@ -415,6 +415,88 @@ public class FirebaseHelper {
                 .addOnFailureListener(e -> callback.onResult(false));
     }
 
+    // ==================== Token FCM ====================
+
+    /**
+     * Salva (ou atualiza) o token FCM do paciente no Firestore.
+     *
+     * Por que armazenar no Firestore?
+     * A Cloud Function "acordarPacientes" precisa saber o endereço FCM de cada
+     * relógio para enviar a mensagem WAKE_UP. O token é o único identificador
+     * confiável — não há IP fixo nem outro endereçamento disponível.
+     *
+     * Por que sem callback?
+     * Salvo no modo "fire and forget": se falhar, onNewToken() será chamado
+     * novamente pelo FCM SDK na próxima inicialização, garantindo eventual
+     * consistência sem bloquear o fluxo de inicialização do serviço.
+     *
+     * @param uid   UID do usuário (paciente) autenticado
+     * @param token token FCM atual, fornecido pelo FCM SDK via onNewToken()
+     *              ou FirebaseMessaging.getInstance().getToken()
+     */
+    public static void salvarFcmToken(String uid, String token) {
+        // Usa set+merge em vez de update: update falha se o campo ainda não existir
+        // no documento (ex: primeiro login após atualização do app). merge é idempotente
+        // e cria o campo mesmo em documentos que nunca tiveram "fcmToken".
+        Map<String, Object> dados = new HashMap<>();
+        dados.put("fcmToken", token);
+        db.collection("users").document(uid)
+                .set(dados, com.google.firebase.firestore.SetOptions.merge())
+                .addOnSuccessListener(v ->
+                        Log.d(TAG, "Token FCM salvo (uid=" + uid + ")"))
+                .addOnFailureListener(e ->
+                        Log.w(TAG, "Falha ao salvar token FCM: " + e.getMessage()));
+    }
+
+    /**
+     * Grava o campo "solicitarWakeUp" no documento do paciente para acionar
+     * a Cloud Function que enviará o FCM de wake-up ao relógio.
+     *
+     * Por que o cuidador pode escrever no documento do paciente?
+     * O cuidador já tem acesso de leitura ao documento do paciente (via
+     * pacientesVinculados, populado pela vinculação com codigoVinculo).
+     * As regras do Firestore devem permitir escrita do campo "solicitarWakeUp"
+     * apenas para cuidadores vinculados — adicione uma regra específica se necessário.
+     *
+     * Usa set+merge para não sobrescrever outros campos do documento do paciente.
+     *
+     * @param uidPaciente UID do paciente cujo relógio deve ser acordado
+     */
+    public static void solicitarWakeUpPaciente(String uidPaciente) {
+        Map<String, Object> dados = new HashMap<>();
+        dados.put("solicitarWakeUp", FieldValue.serverTimestamp());
+        db.collection("users").document(uidPaciente)
+                .set(dados, com.google.firebase.firestore.SetOptions.merge())
+                .addOnSuccessListener(v ->
+                        Log.d(TAG, "Wake-up solicitado para paciente=" + uidPaciente))
+                .addOnFailureListener(e ->
+                        Log.w(TAG, "Falha ao solicitar wake-up para "
+                                + uidPaciente + ": " + e.getMessage()));
+    }
+
+    /**
+     * Obtém o token FCM atual do SDK e salva no Firestore se tiver mudado.
+     *
+     * Deve ser chamado no início de cada sessão do HeartRateService para cobrir
+     * dois cenários onde onNewToken() pode ter falhado anteriormente:
+     *  a) Token renovado enquanto o usuário não estava autenticado
+     *  b) Falha de rede no momento da renovação anterior
+     *
+     * A operação é assíncrona e sem bloqueio — o serviço continua normalmente
+     * enquanto o token é obtido e salvo em background.
+     *
+     * @param uid UID do paciente autenticado
+     */
+    public static void sincronizarFcmToken(String uid) {
+        com.google.firebase.messaging.FirebaseMessaging.getInstance().getToken()
+                .addOnSuccessListener(token -> {
+                    Log.d(TAG, "Token FCM sincronizado — salvando para uid=" + uid);
+                    salvarFcmToken(uid, token);
+                })
+                .addOnFailureListener(e ->
+                        Log.w(TAG, "Não foi possível obter token FCM: " + e.getMessage()));
+    }
+
     /**
      * Confirma um alerta com auditoria completa.
      *
@@ -428,7 +510,7 @@ public class FirebaseHelper {
      * @param callback   onResult(null) em caso de sucesso
      */
     public static void confirmarAlerta(String alertaId, String uidCuidador,
-                                        Callback<Void> callback) {
+                                       Callback<Void> callback) {
         Map<String, Object> updates = new HashMap<>();
         updates.put("acknowledged",   true);
         updates.put("acknowledgedBy", uidCuidador);
