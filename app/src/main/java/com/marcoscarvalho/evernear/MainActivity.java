@@ -54,13 +54,16 @@ public class MainActivity extends AppCompatActivity {
                 .addOnSuccessListener(doc -> {
                     if (!doc.exists()) return;
 
-                    String tipo = doc.getString("tipo");
-                    if ("patient".equals(tipo) || "paciente".equals(tipo)) {
-                        // Paciente autenticado → monitor cardíaco
+                    String tipo = doc.getString(FirebaseHelper.Fields.TIPO);
+                    // Tipo ausente ou desconhecido → permanece na tela de seleção de papel
+                    if (tipo == null) return;
+
+                    if (FirebaseHelper.isPaciente(tipo)) {
                         startActivity(new Intent(MainActivity.this, PatientActivity.class));
-                    } else {
-                        // Cuidador autenticado → tela de monitoramento do cuidador
+                    } else if (FirebaseHelper.isCuidador(tipo)) {
                         startActivity(new Intent(MainActivity.this, CaregiverActivity.class));
+                    } else {
+                        return; // valor desconhecido — não redireciona
                     }
                     finish();
                 });

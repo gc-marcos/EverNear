@@ -9,12 +9,8 @@ import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 
-import com.google.android.gms.tasks.OnCompleteListener;
-import com.google.android.gms.tasks.Task;
-import com.google.firebase.auth.AuthResult;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.FirebaseFirestore;
@@ -23,17 +19,17 @@ public class LoginActivity extends AppCompatActivity {
 
     private static final String TAG = "LoginActivity";
 
-    private EditText etNome;
-    private EditText etTelefone;   // apenas paciente no modo cadastro
-    private EditText etEmailPhone;
-    private EditText etPassword;
-    private Button btnLogin;
-    private TextView tvCreateAccount;
+    private EditText  etNome;
+    private EditText  etTelefone;   // apenas paciente no modo cadastro
+    private EditText  etEmailPhone;
+    private EditText  etPassword;
+    private Button    btnLogin;
+    private TextView  tvCreateAccount;
 
-    private FirebaseAuth mAuth;
+    private FirebaseAuth      mAuth;
     private FirebaseFirestore db;
-    private String userType;
-    private boolean isModoCadastro = false;
+    private String            userType;
+    private boolean           isModoCadastro = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -43,13 +39,13 @@ public class LoginActivity extends AppCompatActivity {
         userType = getIntent().getStringExtra("userType");
 
         mAuth = FirebaseAuth.getInstance();
-        db = FirebaseFirestore.getInstance();
+        db    = FirebaseFirestore.getInstance();
 
-        etNome = findViewById(R.id.et_nome);
-        etTelefone = findViewById(R.id.et_telefone);
-        etEmailPhone = findViewById(R.id.et_email_phone);
-        etPassword = findViewById(R.id.et_password);
-        btnLogin = findViewById(R.id.btn_login);
+        etNome        = findViewById(R.id.et_nome);
+        etTelefone    = findViewById(R.id.et_telefone);
+        etEmailPhone  = findViewById(R.id.et_email_phone);
+        etPassword    = findViewById(R.id.et_password);
+        btnLogin      = findViewById(R.id.btn_login);
         tvCreateAccount = findViewById(R.id.tv_create_account);
 
         btnLogin.setOnClickListener(v -> {
@@ -70,8 +66,8 @@ public class LoginActivity extends AppCompatActivity {
             etNome.requestFocus();
 
             // Campo de telefone só aparece para pacientes
-            boolean ehPaciente = "patient".equals(userType) || "paciente".equals(userType);
-            etTelefone.setVisibility(ehPaciente ? View.VISIBLE : View.GONE);
+            etTelefone.setVisibility(
+                    FirebaseHelper.isPaciente(userType) ? View.VISIBLE : View.GONE);
 
             btnLogin.setText("CADASTRAR");
             tvCreateAccount.setText("Já tenho conta → Entrar");
@@ -88,7 +84,7 @@ public class LoginActivity extends AppCompatActivity {
     // ==================== Login ====================
 
     private void realizarLogin() {
-        String email = etEmailPhone.getText().toString().trim();
+        String email    = etEmailPhone.getText().toString().trim();
         String password = etPassword.getText().toString().trim();
 
         if (email.isEmpty()) {
@@ -102,32 +98,32 @@ public class LoginActivity extends AppCompatActivity {
             return;
         }
 
+        // Lambda em vez de OnCompleteListener anônimo — consistente com o restante do projeto
         mAuth.signInWithEmailAndPassword(email, password)
-                .addOnCompleteListener(this, new OnCompleteListener<AuthResult>() {
-                    @Override
-                    public void onComplete(@NonNull Task<AuthResult> task) {
-                        if (task.isSuccessful()) {
-                            FirebaseUser user = mAuth.getCurrentUser();
-                            if (user != null) {
-                                db.collection("users").document(user.getUid()).get()
-                                        .addOnSuccessListener(doc -> {
-                                            if (doc.exists()) {
-                                                direcionarAposLogin(doc.getString("tipo"));
-                                            } else {
-                                                criarPerfilFirestore(user, "Usuário", null);
-                                            }
-                                        })
-                                        .addOnFailureListener(e -> Toast.makeText(LoginActivity.this,
-                                                "Erro ao acessar banco: " + e.getMessage(),
-                                                Toast.LENGTH_LONG).show());
-                            }
-                        } else {
-                            String msg = task.getException() != null
-                                    ? task.getException().getMessage() : "Erro desconhecido";
-                            Log.w(TAG, "signInWithEmail:failure", task.getException());
-                            Toast.makeText(LoginActivity.this, "Falha no login: " + msg,
-                                    Toast.LENGTH_LONG).show();
+                .addOnCompleteListener(this, task -> {
+                    if (task.isSuccessful()) {
+                        FirebaseUser user = mAuth.getCurrentUser();
+                        if (user != null) {
+                            db.collection("users").document(user.getUid()).get()
+                                    .addOnSuccessListener(doc -> {
+                                        if (doc.exists()) {
+                                            direcionarAposLogin(doc.getString(
+                                                    FirebaseHelper.Fields.TIPO));
+                                        } else {
+                                            criarPerfilFirestore(user, "Usuário", null);
+                                        }
+                                    })
+                                    .addOnFailureListener(e ->
+                                            Toast.makeText(LoginActivity.this,
+                                                    "Erro ao acessar banco: " + e.getMessage(),
+                                                    Toast.LENGTH_LONG).show());
                         }
+                    } else {
+                        String msg = task.getException() != null
+                                ? task.getException().getMessage() : "Erro desconhecido";
+                        Log.w(TAG, "signInWithEmail:failure", task.getException());
+                        Toast.makeText(LoginActivity.this,
+                                "Falha no login: " + msg, Toast.LENGTH_LONG).show();
                     }
                 });
     }
@@ -135,11 +131,11 @@ public class LoginActivity extends AppCompatActivity {
     // ==================== Cadastro ====================
 
     private void realizarCadastro() {
-        String nome = etNome.getText().toString().trim();
-        String email = etEmailPhone.getText().toString().trim();
-        String password = etPassword.getText().toString().trim();
-        boolean ehPaciente = "patient".equals(userType) || "paciente".equals(userType);
-        String telefone = ehPaciente ? etTelefone.getText().toString().trim() : null;
+        String  nome       = etNome.getText().toString().trim();
+        String  email      = etEmailPhone.getText().toString().trim();
+        String  password   = etPassword.getText().toString().trim();
+        boolean ehPaciente = FirebaseHelper.isPaciente(userType);
+        String  telefone   = ehPaciente ? etTelefone.getText().toString().trim() : null;
 
         // Validações
         if (nome.isEmpty()) {
@@ -187,22 +183,20 @@ public class LoginActivity extends AppCompatActivity {
 
         final String telefoneFinal = telefone;
 
+        // Lambda em vez de OnCompleteListener anônimo — consistente com o restante do projeto
         mAuth.createUserWithEmailAndPassword(email, password)
-                .addOnCompleteListener(this, new OnCompleteListener<AuthResult>() {
-                    @Override
-                    public void onComplete(@NonNull Task<AuthResult> task) {
-                        if (task.isSuccessful()) {
-                            FirebaseUser user = mAuth.getCurrentUser();
-                            if (user != null) {
-                                criarPerfilFirestore(user, nome, telefoneFinal);
-                            }
-                        } else {
-                            Log.w(TAG, "createUserWithEmail:failure", task.getException());
-                            String msg = task.getException() != null
-                                    ? task.getException().getLocalizedMessage() : "Erro desconhecido";
-                            Toast.makeText(LoginActivity.this, "Falha no cadastro: " + msg,
-                                    Toast.LENGTH_LONG).show();
+                .addOnCompleteListener(this, task -> {
+                    if (task.isSuccessful()) {
+                        FirebaseUser user = mAuth.getCurrentUser();
+                        if (user != null) {
+                            criarPerfilFirestore(user, nome, telefoneFinal);
                         }
+                    } else {
+                        Log.w(TAG, "createUserWithEmail:failure", task.getException());
+                        String msg = task.getException() != null
+                                ? task.getException().getLocalizedMessage() : "Erro desconhecido";
+                        Toast.makeText(LoginActivity.this,
+                                "Falha no cadastro: " + msg, Toast.LENGTH_LONG).show();
                     }
                 });
     }
@@ -236,14 +230,16 @@ public class LoginActivity extends AppCompatActivity {
     // ==================== Navegação ====================
 
     /**
-     * Após login/cadastro bem-sucedido, vai para SetupPermissoesActivity.
+     * Após login/cadastro bem-sucedido, popula o cache local do BootReceiver e navega
+     * para SetupPermissoesActivity.
      *
-     * A tela de setup percorre todas as permissões necessárias para o papel
-     * do usuário, abrindo DIRETAMENTE os diálogos do sistema Android (sem
-     * telas intermediárias). Ao concluir, navega para PatientActivity ou
-     * CaregiverActivity conforme o papel.
+     * O cache garante que o BootReceiver consiga iniciar o serviço correto mesmo offline
+     * (sem depender de uma consulta ao Firestore no momento do boot).
      */
     private void direcionarAposLogin(String tipo) {
+        // Popula o cache local para que o BootReceiver funcione mesmo sem rede no boot
+        BootReceiver.salvarTipoAposLogin(this, tipo);
+
         Intent setup = new Intent(LoginActivity.this, SetupPermissoesActivity.class);
         setup.putExtra("userType", tipo);
         // FLAG_ACTIVITY_CLEAR_TASK: remove LoginActivity da pilha de navegação

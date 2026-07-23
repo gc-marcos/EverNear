@@ -24,13 +24,15 @@ import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.firestore.DocumentChange;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.ListenerRegistration;
-import com.google.firebase.firestore.ServerTimestamp;
 
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -38,6 +40,14 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class CaregiverActivity extends AppCompatActivity {
 
     private static final int REQ_CALL_PHONE = 2001;
+
+    /**
+     * Formato de data/hora para o timestamp da última leitura de BPM.
+     * Instância estática — Firestore callbacks executam na main thread, portanto
+     * não há risco de acesso concorrente.
+     */
+    private static final SimpleDateFormat SDF_BPM_TS =
+            new SimpleDateFormat("dd/MM HH:mm", Locale.getDefault());
 
     // ── Views ──────────────────────────────────────────────────────────────────
     private TextView     tvPatientName;
@@ -69,12 +79,15 @@ public class CaregiverActivity extends AppCompatActivity {
     /**
      * Alertas já exibidos nesta sessão (em memória).
      * Evita re-exibir o mesmo alerta se o snapshot chegar mais de uma vez.
+     *
+     * Usa synchronizedSet: embora os callbacks do Firestore cheguem na main thread
+     * na maioria das versões do SDK, o wrapper garante corretude em qualquer cenário.
      */
-    private final Set<String> alertasExibidos = new HashSet<>();
+    private final Set<String> alertasExibidos = Collections.synchronizedSet(new HashSet<>());
 
     /**
      * Timestamp do momento em que a Activity foi criada.
-     * Alertas com createdAt anterior a este valor são ignorados —
+     * Alertas com {@code timestamp} anterior a este valor são ignorados —
      * evita dialogs de alertas antigos ao reabrir o app.
      */
     private Date timestampAbertura;
@@ -148,7 +161,6 @@ public class CaregiverActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        // FIX: todos os três listeners são removidos (antes faltava alertasListener)
         if (cuidadorListener != null) cuidadorListener.remove();
         if (pacienteListener  != null) pacienteListener.remove();
         if (alertasListener   != null) alertasListener.remove();
@@ -164,7 +176,8 @@ public class CaregiverActivity extends AppCompatActivity {
                     if (e != null || snapshot == null || !snapshot.exists()) return;
 
                     @SuppressWarnings("unchecked")
-                    List<String> uids = (List<String>) snapshot.get("pacientesVinculados");
+                    List<String> uids = (List<String>) snapshot.get(
+                            FirebaseHelper.Fields.PACIENTES_VINCULADOS);
 
                     if (uids == null || uids.isEmpty()) {
                         mostrarEstadoSemPaciente();
@@ -212,7 +225,7 @@ public class CaregiverActivity extends AppCompatActivity {
     }
 
     /**
-     * FIX: usa AtomicInteger no lugar do array int[] para evitar condição de corrida
+     * Usa AtomicInteger no lugar do array int[] para evitar condição de corrida
      * nos callbacks assíncronos paralelos do Firestore.
      */
     private void carregarNomesEConstruirChips(List<String> uids) {
@@ -226,12 +239,10 @@ public class CaregiverActivity extends AppCompatActivity {
             db.collection("users").document(uid).get()
                     .addOnSuccessListener(doc -> {
                         if (doc.exists()) {
-                            String nome    = doc.getString("nome");
-                            String apelido = doc.getString("apelido");
+                            String apelido = doc.getString(FirebaseHelper.Fields.APELIDO);
+                            String nome    = doc.getString(FirebaseHelper.Fields.NOME);
                             nomesPorUid.put(uid,
-                                    (apelido != null && !apelido.isEmpty())
-                                            ? apelido
-                                            : (nome != null ? nome : "Paciente"));
+                                    FirebaseHelper.nomeExibir(apelido, nome, "Paciente"));
                         } else {
                             nomesPorUid.put(uid, "Paciente");
                         }
@@ -245,7 +256,7 @@ public class CaregiverActivity extends AppCompatActivity {
     }
 
     /**
-     * FIX: atualiza apenas os chips que mudaram de estado (ativo/inativo)
+     * Atualiza apenas os chips que mudaram de estado (ativo/inativo)
      * em vez de recriar todas as views — evita flickering visual.
      */
     private void construirChips(List<String> uids) {
@@ -344,29 +355,27 @@ public class CaregiverActivity extends AppCompatActivity {
                 .addSnapshotListener((doc, e) -> {
                     if (e != null || doc == null || !doc.exists()) return;
 
-                    String nome    = doc.getString("nome");
-                    String apelido = doc.getString("apelido");
-                    String exibir  = (apelido != null && !apelido.isEmpty()) ? apelido : nome;
+                    String apelido = doc.getString(FirebaseHelper.Fields.APELIDO);
+                    String nome    = doc.getString(FirebaseHelper.Fields.NOME);
+                    String exibir  = FirebaseHelper.nomeExibir(apelido, nome, "Paciente");
 
-                    if (exibir != null) {
-                        tvPatientName.setText(exibir);
-                        tvAvatarInitials.setText(gerarIniciais(exibir));
-                        nomesPorUid.put(uidPaciente, exibir);
-                    }
+                    tvPatientName.setText(exibir);
+                    tvAvatarInitials.setText(gerarIniciais(exibir));
+                    nomesPorUid.put(uidPaciente, exibir);
 
-                    telefonePaciente = doc.getString("telefone");
+                    telefonePaciente = doc.getString(FirebaseHelper.Fields.TELEFONE);
                     if (btnCall != null) {
                         btnCall.setAlpha(
                                 telefonePaciente != null && !telefonePaciente.isEmpty()
                                         ? 1f : 0.4f);
                     }
 
-                    Long ultimoBpm = doc.getLong("ultimoBpm");
+                    Long ultimoBpm = doc.getLong(FirebaseHelper.Fields.ULTIMO_BPM);
                     if (ultimoBpm != null) {
                         tvBpmValue.setText(ultimoBpm + " bpm");
 
-                        Long bpmMin = doc.getLong("bpmMin");
-                        Long bpmMax = doc.getLong("bpmMax");
+                        Long bpmMin = doc.getLong(FirebaseHelper.Fields.BPM_MIN);
+                        Long bpmMax = doc.getLong(FirebaseHelper.Fields.BPM_MAX);
                         int min = bpmMin != null ? bpmMin.intValue() : 50;
                         int max = bpmMax != null ? bpmMax.intValue() : 120;
 
@@ -375,9 +384,8 @@ public class CaregiverActivity extends AppCompatActivity {
                                         ? Color.parseColor("#FF5252")
                                         : Color.parseColor("#4CAF50"));
 
-                        // Campo correto: "ultimoBpmTimestamp" (não "ultimoBpmAt")
                         if (tvBpmTimestamp != null) {
-                            Date bpmAt = doc.getDate("ultimoBpmTimestamp");
+                            Date bpmAt = doc.getDate(FirebaseHelper.Fields.ULTIMO_BPM_TIMESTAMP);
                             tvBpmTimestamp.setText(bpmAt != null
                                     ? "às " + formatarHoraCompleta(bpmAt)
                                     : "");
@@ -388,8 +396,7 @@ public class CaregiverActivity extends AppCompatActivity {
                         if (tvBpmTimestamp != null) tvBpmTimestamp.setText("");
                     }
 
-                    // Status do monitoramento (ATIVO / PARADO / RECONECTANDO / SEM_SENSOR)
-                    String status = doc.getString("statusMonitoramento");
+                    String status = doc.getString(FirebaseHelper.Fields.STATUS_MONITORAMENTO);
                     atualizarStatusMonitoramento(status);
                 });
     }
@@ -397,18 +404,18 @@ public class CaregiverActivity extends AppCompatActivity {
     // ==================== Alertas em tempo real (com app aberto) ===============
 
     /**
-     * FIX: filtra alertas por createdAt >= timestampAbertura.
+     * Filtra alertas pelo campo {@code timestamp} >= {@code timestampAbertura}.
      * Evita exibir dialogs de alertas antigos ao reabrir o app.
      *
-     * Requer que o documento de alerta tenha o campo "createdAt" (Timestamp do Firestore).
-     * Se o campo não existir, o alerta é exibido mesmo assim (fail-safe).
+     * O campo usado é "timestamp" — o mesmo gravado por {@link FirebaseHelper#enviarAlerta}.
+     * Se o campo não existir no documento, o alerta é exibido mesmo assim (fail-safe).
      */
     private void ouvirAlertasComApp() {
         if (uidCuidador == null) return;
 
         alertasListener = db.collection("alerts")
-                .whereEqualTo("cuidadorId", uidCuidador)
-                .whereEqualTo("acknowledged", false)
+                .whereEqualTo(FirebaseHelper.Fields.CUIDADOR_ID, uidCuidador)
+                .whereEqualTo(FirebaseHelper.Fields.ACKNOWLEDGED, false)
                 .addSnapshotListener((snapshots, e) -> {
                     if (e != null || snapshots == null) return;
 
@@ -418,18 +425,23 @@ public class CaregiverActivity extends AppCompatActivity {
                         String alertaId = dc.getDocument().getId();
                         if (alertasExibidos.contains(alertaId)) continue;
 
-                        // FIX: ignora alertas criados antes da abertura da tela
-                        Date createdAt = dc.getDocument().getDate("createdAt");
-                        if (createdAt != null && createdAt.before(timestampAbertura)) {
+                        // Ignora alertas criados antes da abertura da tela
+                        Date alertaTimestamp = dc.getDocument().getDate(
+                                FirebaseHelper.Fields.TIMESTAMP);
+                        if (alertaTimestamp != null
+                                && alertaTimestamp.before(timestampAbertura)) {
                             alertasExibidos.add(alertaId); // marca para não reprocessar
                             continue;
                         }
 
                         alertasExibidos.add(alertaId);
 
-                        String nomePaciente = dc.getDocument().getString("pacienteNome");
-                        Long   bpm          = dc.getDocument().getLong("bpm");
-                        String tipo         = dc.getDocument().getString("tipo");
+                        String nomePaciente = dc.getDocument().getString(
+                                FirebaseHelper.Fields.PACIENTE_NOME);
+                        Long   bpm          = dc.getDocument().getLong(
+                                FirebaseHelper.Fields.BPM);
+                        String tipo         = dc.getDocument().getString(
+                                FirebaseHelper.Fields.TIPO_ALERTA);
 
                         exibirAlertaDialog(alertaId, nomePaciente,
                                 bpm != null ? bpm.intValue() : 0, tipo);
@@ -438,11 +450,10 @@ public class CaregiverActivity extends AppCompatActivity {
     }
 
     /**
-     * FIX: verifica se a Activity ainda está ativa antes de exibir o dialog.
+     * Verifica se a Activity ainda está ativa antes de exibir o dialog.
      * Evita crash quando o callback do Firestore chega após o usuário sair da tela.
      */
     private void exibirAlertaDialog(String alertaId, String paciente, int bpm, String tipo) {
-        // Guard: não exibe dialog em Activity destruída ou finalizada
         if (isFinishing() || isDestroyed()) return;
 
         String titulo;
@@ -474,17 +485,17 @@ public class CaregiverActivity extends AppCompatActivity {
 
     /**
      * Confirma o alerta via FirebaseHelper para garantir auditoria completa:
-     * acknowledged=true, acknowledgedBy=uid, acknowledgedAt=serverTimestamp.
+     * acknowledged=true, acknowledgedBy=uidCuidador, acknowledgedAt=serverTimestamp.
+     *
+     * Usa {@code uidCuidador} — campo já disponível na classe — em vez de consultar
+     * FirebaseAuth novamente.
      */
     private void confirmarAlerta(String alertaId) {
-        String uid = FirebaseAuth.getInstance().getCurrentUser() != null
-                ? FirebaseAuth.getInstance().getCurrentUser().getUid()
-                : null;
-        if (uid == null) {
+        if (uidCuidador == null) {
             Toast.makeText(this, "Erro: sessão expirada", Toast.LENGTH_SHORT).show();
             return;
         }
-        FirebaseHelper.confirmarAlerta(alertaId, uid, new FirebaseHelper.Callback<Void>() {
+        FirebaseHelper.confirmarAlerta(alertaId, uidCuidador, new FirebaseHelper.Callback<Void>() {
             @Override public void onResult(Void v) { /* confirmação silenciosa */ }
             @Override public void onError(Exception e) {
                 Toast.makeText(CaregiverActivity.this,
@@ -546,11 +557,11 @@ public class CaregiverActivity extends AppCompatActivity {
      *
      * Cores e textos mapeados do campo "statusMonitoramento" do Firestore
      * (gravado pelo HeartRateService via FirebaseHelper.salvarStatusMonitoramento):
-     *   ATIVO        → verde  — sensor lendo normalmente
+     *   ATIVO        → verde   — sensor lendo normalmente
      *   RECONECTANDO → amarelo — watchdog tentando recuperar o sensor
-     *   PARADO       → cinza  — serviço encerrado intencionalmente
+     *   PARADO       → cinza   — serviço encerrado intencionalmente
      *   SEM_SENSOR   → vermelho — hardware indisponível
-     *   null / ""    → cinza  — sem dados ainda
+     *   null / ""    → cinza   — sem dados ainda
      */
     private void atualizarStatusMonitoramento(String status) {
         if (tvStatusMonitoramento == null || vStatusDot == null) return;
@@ -596,17 +607,14 @@ public class CaregiverActivity extends AppCompatActivity {
         tvStatusMonitoramento.setText(texto);
         tvStatusMonitoramento.setTextColor(corTexto);
 
-        android.graphics.drawable.GradientDrawable dot =
-                new android.graphics.drawable.GradientDrawable();
-        dot.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+        GradientDrawable dot = new GradientDrawable();
+        dot.setShape(GradientDrawable.OVAL);
         dot.setColor(corDot);
         vStatusDot.setBackground(dot);
     }
 
     /** Formata Date como "dd/MM HH:mm" para exibir data e horário da última leitura. */
     private String formatarHoraCompleta(Date data) {
-        java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("dd/MM HH:mm",
-                java.util.Locale.getDefault());
-        return sdf.format(data);
+        return SDF_BPM_TS.format(data);
     }
 }

@@ -37,11 +37,8 @@ public class BootReceiver extends BroadcastReceiver {
     private static final String PREFS_NAME    = "evernear_prefs";
     private static final String KEY_USER_TIPO = "user_tipo";
 
-    // Valores aceitos para o campo "tipo" no Firestore
-    private static final String TIPO_PACIENTE = "paciente";
-    private static final String TIPO_PATIENT  = "patient";    // suporte ao valor em inglês
-    private static final String TIPO_CUIDADOR = "cuidador";
-    private static final String TIPO_CAREGIVER= "caregiver";  // suporte ao valor em inglês
+    // Os valores aceitos para o campo "tipo" e os helpers de verificação estão centralizados
+    // em FirebaseHelper.Tipos, FirebaseHelper.isPaciente() e FirebaseHelper.isCuidador().
 
     @Override
     public void onReceive(Context context, Intent intent) {
@@ -117,12 +114,12 @@ public class BootReceiver extends BroadcastReceiver {
      * Checagem explícita para evitar iniciar serviço errado com valores inesperados.
      */
     private void iniciarServicoPorTipo(Context context, String tipo) {
-        if (TIPO_PACIENTE.equals(tipo) || TIPO_PATIENT.equals(tipo)) {
+        if (FirebaseHelper.isPaciente(tipo)) {
             Log.d(TAG, "Iniciando HeartRateService (paciente)");
             ContextCompat.startForegroundService(context,
                     new Intent(context, HeartRateService.class));
 
-        } else if (TIPO_CUIDADOR.equals(tipo) || TIPO_CAREGIVER.equals(tipo)) {
+        } else if (FirebaseHelper.isCuidador(tipo)) {
             Log.d(TAG, "Iniciando CaregiverAlertService (cuidador)");
             ContextCompat.startForegroundService(context,
                     new Intent(context, CaregiverAlertService.class));

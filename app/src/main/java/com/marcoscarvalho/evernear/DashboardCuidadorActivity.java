@@ -18,19 +18,30 @@ import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.ListenerRegistration;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class DashboardCuidadorActivity extends AppCompatActivity {
 
-    private TextView tvWelcome;
-    private EditText etApelido, etCodigo;
-    private Button btnSalvarApelido, btnVincular;
+    private TextView     tvWelcome;
+    private EditText     etApelido, etCodigo;
+    private Button       btnSalvarApelido, btnVincular;
     private LinearLayout llListaPacientes;
-    private TextView tvSemPacientes;
+    private TextView     tvSemPacientes;
 
-    private FirebaseFirestore db;
-    private String uidCuidador;
+    private FirebaseFirestore    db;
+    private String               uidCuidador;
     private ListenerRegistration listenerRegistration;
+
+    /**
+     * Rastreia a última lista de UIDs renderizada.
+     * Evita recriar todos os cards quando o snapshot do cuidador dispara por
+     * motivos não relacionados à lista de pacientes (ex.: mudança de apelido).
+     */
+    private List<String> ultimosUids = null;
+
+    // ==================== Ciclo de vida ====================
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -45,7 +56,7 @@ public class DashboardCuidadorActivity extends AppCompatActivity {
         llListaPacientes = findViewById(R.id.ll_lista_pacientes);
         tvSemPacientes   = findViewById(R.id.tv_sem_pacientes);
 
-        db = FirebaseFirestore.getInstance();
+        db          = FirebaseFirestore.getInstance();
         uidCuidador = FirebaseAuth.getInstance().getUid();
 
         if (uidCuidador == null) {
@@ -56,60 +67,122 @@ public class DashboardCuidadorActivity extends AppCompatActivity {
 
         btnSalvarApelido.setOnClickListener(v -> salvarApelido());
         btnVincular.setOnClickListener(v -> tentarVincular());
+    }
+
+    /**
+     * Listener criado em onStart() e removido em onStop() — garante que os dados
+     * sejam atualizados ao retornar à tela após minimizar o app.
+     * O padrão onStart/onStop é o correto para Activities com SnapshotListeners.
+     */
+    @Override
+    protected void onStart() {
+        super.onStart();
         iniciarListener();
     }
 
+    @Override
+    protected void onStop() {
+        super.onStop();
+        if (listenerRegistration != null) {
+            listenerRegistration.remove();
+            listenerRegistration = null;
+        }
+        // Reseta o cache de UIDs para forçar reload completo ao retornar
+        // (um paciente pode ter sido adicionado/removido enquanto a tela estava fora do foco)
+        ultimosUids = null;
+    }
+
+    // ==================== Listener Firestore ====================
+
     private void iniciarListener() {
+        // Remove listener anterior antes de criar (garante unicidade mesmo após onStart())
+        if (listenerRegistration != null) listenerRegistration.remove();
+
         listenerRegistration = db.collection("users").document(uidCuidador)
                 .addSnapshotListener((snapshot, e) -> {
                     if (e != null || snapshot == null || !snapshot.exists()) return;
 
-                    String apelido = snapshot.getString("apelido");
-                    String nome    = snapshot.getString("nome");
-                    String exibir  = (apelido != null && !apelido.isEmpty()) ? apelido : nome;
-                    tvWelcome.setText("Olá, " + (exibir != null ? exibir : "Cuidador"));
+                    String apelido = snapshot.getString(FirebaseHelper.Fields.APELIDO);
+                    String nome    = snapshot.getString(FirebaseHelper.Fields.NOME);
+                    tvWelcome.setText("Olá, " + FirebaseHelper.nomeExibir(apelido, nome, "Cuidador"));
 
+                    // Preenche campo de apelido somente se vazio (não sobrescreve edição em curso)
                     if (apelido != null && !apelido.isEmpty()
                             && etApelido.getText().toString().isEmpty()) {
                         etApelido.setText(apelido);
                     }
 
                     @SuppressWarnings("unchecked")
-                    List<String> pacientesUids = (List<String>) snapshot.get("pacientesVinculados");
+                    List<String> pacientesUids =
+                            (List<String>) snapshot.get(FirebaseHelper.Fields.PACIENTES_VINCULADOS);
                     carregarListaPacientes(pacientesUids);
                 });
     }
 
-    private void carregarListaPacientes(List<String> uids) {
-        llListaPacientes.removeAllViews();
+    // ==================== Lista de pacientes ====================
 
+    /**
+     * Carrega e exibe os pacientes vinculados ao cuidador, preservando a ordem de prioridade.
+     *
+     * Otimizações:
+     *  • Se a lista de UIDs não mudou desde a última renderização, os cards são mantidos
+     *    para evitar flickering visual causado por snapshots disparados por outros campos.
+     *  • Array indexado + AtomicInteger garante que os cards sejam exibidos na ordem
+     *    correta, independente da ordem de chegada dos callbacks assíncronos.
+     */
+    private void carregarListaPacientes(List<String> uids) {
         if (uids == null || uids.isEmpty()) {
             tvSemPacientes.setVisibility(View.VISIBLE);
+            llListaPacientes.removeAllViews();
+            ultimosUids = null;
             return;
         }
+
         tvSemPacientes.setVisibility(View.GONE);
 
-        for (String uidPaciente : uids) {
+        // Evita recriar os cards quando a lista de UIDs não mudou
+        if (uids.equals(ultimosUids)) return;
+        ultimosUids = new ArrayList<>(uids);
+
+        int           total    = uids.size();
+        String[]      textos   = new String[total];
+        AtomicInteger pendentes = new AtomicInteger(total);
+
+        for (int i = 0; i < total; i++) {
+            final int    idx         = i;
+            final String uidPaciente = uids.get(i);
+
             db.collection("users").document(uidPaciente).get()
                     .addOnSuccessListener(doc -> {
-                        if (!doc.exists()) return;
-                        String nomePaciente   = doc.getString("nome");
-                        String apelidoPaciente = doc.getString("apelido");
-                        String textoExibir = (apelidoPaciente != null && !apelidoPaciente.isEmpty())
-                                ? apelidoPaciente + " (" + nomePaciente + ")"
-                                : (nomePaciente != null ? nomePaciente : "Paciente");
+                        if (!doc.exists()) {
+                            textos[idx] = "Paciente (não encontrado)";
+                        } else {
+                            String nomePac    = doc.getString(FirebaseHelper.Fields.NOME);
+                            String apelidoPac = doc.getString(FirebaseHelper.Fields.APELIDO);
+                            String exibir     = FirebaseHelper.nomeExibir(apelidoPac, nomePac, "Paciente");
 
-                        // Descobre qual posição de prioridade este cuidador ocupa no paciente
-                        @SuppressWarnings("unchecked")
-                        List<String> cuidadores = (List<String>) doc.get("cuidadoresVinculados");
-                        int prioridade = (cuidadores != null) ? cuidadores.indexOf(uidCuidador) : -1;
-                        String labelPrioridade = prioridade == 0 ? " · Prioridade 1"
-                                : prioridade == 1 ? " · Prioridade 2"
-                                : prioridade == 2 ? " · Prioridade 3" : "";
-
-                        adicionarCardPaciente(textoExibir + labelPrioridade);
+                            // Prioridade: posição deste cuidador na lista do paciente
+                            @SuppressWarnings("unchecked")
+                            List<String> cuidadores =
+                                    (List<String>) doc.get(FirebaseHelper.Fields.CUIDADORES_VINCULADOS);
+                            int pos = cuidadores != null ? cuidadores.indexOf(uidCuidador) : -1;
+                            String labelPrio = pos >= 0 ? " · Prioridade " + (pos + 1) : "";
+                            textos[idx] = exibir + labelPrio;
+                        }
+                        if (pendentes.decrementAndGet() == 0) construirCards(textos);
                     })
-                    .addOnFailureListener(e -> adicionarCardPaciente("Paciente (erro ao carregar)"));
+                    .addOnFailureListener(ex ->  {
+                        textos[idx] = "Paciente (erro ao carregar)";
+                        if (pendentes.decrementAndGet() == 0) construirCards(textos);
+                    });
+        }
+    }
+
+    /** Constrói os cards na ordem correta após todos os reads assíncronos concluírem. */
+    private void construirCards(String[] textos) {
+        llListaPacientes.removeAllViews();
+        for (String texto : textos) {
+            adicionarCardPaciente(texto);
         }
     }
 
@@ -146,6 +219,15 @@ public class DashboardCuidadorActivity extends AppCompatActivity {
 
     // ==================== Vincular paciente ====================
 
+    /**
+     * Inicia a vinculação com o paciente cujo código foi informado.
+     *
+     * Não realiza verificações de limites previamente: a transação do FirebaseHelper
+     * já as executa de forma ATÔMICA, eliminando a race condition que existia quando
+     * a Activity fazia uma leitura prévia seguida de uma escrita separada.
+     * Os erros semânticos da transação são mapeados para mensagens amigáveis em
+     * {@link #vincular(String)}.
+     */
     private void tentarVincular() {
         String codigo = etCodigo.getText().toString().trim().toUpperCase();
         if (codigo.length() != 6) {
@@ -153,59 +235,25 @@ public class DashboardCuidadorActivity extends AppCompatActivity {
             return;
         }
 
-        // Verifica limite de pacientes do cuidador (máx 3)
-        db.collection("users").document(uidCuidador).get()
-                .addOnSuccessListener(cuidadorDoc -> {
-                    @SuppressWarnings("unchecked")
-                    List<String> jaVinculados = (List<String>) cuidadorDoc.get("pacientesVinculados");
-                    if (jaVinculados != null && jaVinculados.size() >= 3) {
-                        Toast.makeText(this,
-                                "Limite de 3 pacientes por cuidador atingido",
-                                Toast.LENGTH_SHORT).show();
-                        return;
+        FirebaseHelper.buscarPacientePorCodigo(codigo,
+                new FirebaseHelper.Callback<DocumentSnapshot>() {
+                    @Override
+                    public void onResult(DocumentSnapshot pacienteDoc) {
+                        if (pacienteDoc == null) {
+                            Toast.makeText(DashboardCuidadorActivity.this,
+                                    "Paciente não encontrado com esse código",
+                                    Toast.LENGTH_LONG).show();
+                            return;
+                        }
+                        vincular(pacienteDoc.getId());
                     }
 
-                    FirebaseHelper.buscarPacientePorCodigo(codigo,
-                            new FirebaseHelper.Callback<DocumentSnapshot>() {
-                                @Override
-                                public void onResult(DocumentSnapshot pacienteDoc) {
-                                    if (pacienteDoc == null) {
-                                        Toast.makeText(DashboardCuidadorActivity.this,
-                                                "Paciente não encontrado com esse código",
-                                                Toast.LENGTH_LONG).show();
-                                        return;
-                                    }
-
-                                    // Verifica se o paciente já atingiu limite de cuidadores (máx 3)
-                                    @SuppressWarnings("unchecked")
-                                    List<String> cuidadoresDoPaciente =
-                                            (List<String>) pacienteDoc.get("cuidadoresVinculados");
-                                    if (cuidadoresDoPaciente != null
-                                            && cuidadoresDoPaciente.size() >= 3) {
-                                        Toast.makeText(DashboardCuidadorActivity.this,
-                                                "Este paciente já possui 3 cuidadores vinculados",
-                                                Toast.LENGTH_LONG).show();
-                                        return;
-                                    }
-
-                                    // Verifica se este cuidador já está vinculado a este paciente
-                                    if (cuidadoresDoPaciente != null
-                                            && cuidadoresDoPaciente.contains(uidCuidador)) {
-                                        Toast.makeText(DashboardCuidadorActivity.this,
-                                                "Você já está vinculado a este paciente",
-                                                Toast.LENGTH_LONG).show();
-                                        return;
-                                    }
-
-                                    vincular(pacienteDoc.getId());
-                                }
-
-                                @Override
-                                public void onError(Exception e) {
-                                    Toast.makeText(DashboardCuidadorActivity.this,
-                                            "Erro: " + e.getMessage(), Toast.LENGTH_SHORT).show();
-                                }
-                            });
+                    @Override
+                    public void onError(Exception e) {
+                        Toast.makeText(DashboardCuidadorActivity.this,
+                                "Erro ao buscar paciente: " + e.getMessage(),
+                                Toast.LENGTH_SHORT).show();
+                    }
                 });
     }
 
@@ -218,10 +266,25 @@ public class DashboardCuidadorActivity extends AppCompatActivity {
                                 "Paciente vinculado com sucesso!", Toast.LENGTH_SHORT).show();
                         etCodigo.setText("");
                     }
+
                     @Override
                     public void onError(Exception e) {
+                        // Mapeia os erros semânticos da transação para mensagens amigáveis.
+                        // A Activity não faz leituras prévias — confia na transação atômica
+                        // como única fonte de verdade para validações de vinculação.
+                        String mensagem;
+                        String chave = e.getMessage();
+                        if ("LIMITE_CUIDADOR".equals(chave)) {
+                            mensagem = "Você já possui o máximo de 3 pacientes vinculados";
+                        } else if ("LIMITE_PACIENTE".equals(chave)) {
+                            mensagem = "Este paciente já possui 3 cuidadores vinculados";
+                        } else if ("JA_VINCULADO".equals(chave)) {
+                            mensagem = "Você já está vinculado a este paciente";
+                        } else {
+                            mensagem = "Erro ao vincular. Verifique a conexão e tente novamente.";
+                        }
                         Toast.makeText(DashboardCuidadorActivity.this,
-                                "Erro ao vincular: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                                mensagem, Toast.LENGTH_LONG).show();
                     }
                 });
     }
@@ -237,18 +300,18 @@ public class DashboardCuidadorActivity extends AppCompatActivity {
         FirebaseHelper.salvarApelido(uidCuidador, apelido, new FirebaseHelper.Callback<Void>() {
             @Override
             public void onResult(Void result) {
-                Toast.makeText(DashboardCuidadorActivity.this, "Apelido salvo!", Toast.LENGTH_SHORT).show();
+                Toast.makeText(DashboardCuidadorActivity.this,
+                        "Apelido salvo!", Toast.LENGTH_SHORT).show();
             }
+
             @Override
             public void onError(Exception e) {
-                Toast.makeText(DashboardCuidadorActivity.this, "Erro ao salvar apelido", Toast.LENGTH_SHORT).show();
+                Toast.makeText(DashboardCuidadorActivity.this,
+                        EverNearApplication.isOnline()
+                                ? "Erro ao salvar apelido. Tente novamente."
+                                : "Sem conexão com a internet.",
+                        Toast.LENGTH_SHORT).show();
             }
         });
-    }
-
-    @Override
-    protected void onStop() {
-        super.onStop();
-        if (listenerRegistration != null) listenerRegistration.remove();
     }
 }

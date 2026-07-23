@@ -39,6 +39,13 @@ public class PatientActivity extends AppCompatActivity implements HeartRateMonit
     // Controla se a tela deve ficar acesa (apenas durante calibração)
     private boolean telaAcesaParaCalibracao = false;
 
+    /**
+     * Último BPM recebido pelo callback onHeartRate().
+     * Usado em dispararEmergenciaManual() em vez de parsear a TextView, que pode
+     * conter "--", texto de calibração ou outros valores não numéricos.
+     */
+    private int lastBpm = 0;
+
     // ==================== Ciclo de vida ====================
 
     @Override
@@ -133,6 +140,7 @@ public class PatientActivity extends AppCompatActivity implements HeartRateMonit
 
     @Override
     public void onHeartRate(int bpm) {
+        lastBpm = bpm; // salva para uso em emergência manual sem depender da TextView
         runOnUiThread(() -> {
             tvBpmValue.setText(String.valueOf(bpm));
             atualizarStatusVisual(bpm);
@@ -271,11 +279,9 @@ public class PatientActivity extends AppCompatActivity implements HeartRateMonit
                     Toast.LENGTH_SHORT).show();
             return;
         }
-        int bpmAtual = 0;
-        try { bpmAtual = Integer.parseInt(tvBpmValue.getText().toString()); }
-        catch (NumberFormatException ignored) {}
-
-        svc.dispararEmergenciaManual(bpmAtual);
+        // Usa lastBpm (atualizado pelo callback onHeartRate) em vez de parsear a TextView,
+        // que pode conter "--" ou texto de calibração — evitando envio silencioso de bpm=0.
+        svc.dispararEmergenciaManual(lastBpm);
         Toast.makeText(this, "Alerta de emergência enviado!", Toast.LENGTH_LONG).show();
     }
 }

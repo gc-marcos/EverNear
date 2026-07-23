@@ -379,6 +379,9 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
                         if (lista != null) {
                             cuidadoresVinculados = new ArrayList<>(lista);
                         } else {
+                            // Retrocompatibilidade: campo singular usado em versões anteriores ao
+                            // schema atual. TODO: remover após confirmar que todos os documentos
+                            // existentes foram migrados para o campo plural "cuidadoresVinculados".
                             String legado = doc.getString("cuidadorVinculado");
                             cuidadoresVinculados = new ArrayList<>();
                             if (legado != null && !legado.isEmpty()) {
