@@ -48,11 +48,14 @@ public class SetupPermissoesActivity extends AppCompatActivity {
     private static final int REQ_BODY_SENSORS_BACKGROUND  = 3003;
     private static final int REQ_ACTIVITY_RECOGNITION     = 3004;
     private static final int REQ_BATERIA                  = 3005;
+    private static final int REQ_LOCALIZACAO              = 3006;
+    private static final int REQ_GPS                      = 3007;
 
     // ── Tipos de passo ─────────────────────────────────────────────────────
     private enum TipoPasso {
         PERMISSAO_RUNTIME,   // requestPermissions() → diálogo padrão do sistema
-        BATERIA_OTIMIZACAO   // startActivityForResult() → tela de bateria do sistema
+        BATERIA_OTIMIZACAO,  // startActivityForResult() → tela de bateria do sistema
+        GPS_VERIFICACAO      // startActivity(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
     }
 
     // ── Descrição de cada passo ────────────────────────────────────────────
@@ -110,11 +113,14 @@ public class SetupPermissoesActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        // Quando o usuário volta da tela do sistema (bateria, por exemplo),
-        // avança automaticamente para o próximo passo
+        // Quando o usuário volta das configurações do sistema, verifica se o passo
+        // atual foi concluído (bateria isenta, GPS ativado) e avança automaticamente.
         if (passos != null && passoAtual < passos.size()) {
             Passo p = passos.get(passoAtual);
             if (p.tipo == TipoPasso.BATERIA_OTIMIZACAO && estaIsentoOtimizacaoBateria()) {
+                proximoPasso();
+            } else if (p.tipo == TipoPasso.GPS_VERIFICACAO
+                    && LocationHelper.gpsHabilitado(this)) {
                 proximoPasso();
             }
         }
@@ -124,7 +130,7 @@ public class SetupPermissoesActivity extends AppCompatActivity {
 
     private void construirListaPassos() {
         passos = new ArrayList<>();
-        boolean ehPaciente = "patient".equals(userType) || "paciente".equals(userType);
+        boolean ehPaciente = FirebaseHelper.isPaciente(userType);
 
         // ── Passo 1: Notificações (ambos os papéis, API 33+) ─────────────────
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -178,6 +184,36 @@ public class SetupPermissoesActivity extends AppCompatActivity {
             }
         }
 
+        if (ehPaciente) {
+            // ── Passo: permissão de localização ──────────────────────────────
+            // ACCESS_FINE_LOCATION é runtime permission desde API 23.
+            // Necessária para FusedLocationProviderClient e para a API de Geofence.
+            passos.add(new Passo(
+                    TipoPasso.PERMISSAO_RUNTIME,
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    REQ_LOCALIZACAO,
+                    "📍",
+                    "Localização de emergência",
+                    "Permite ao EverNear obter sua posição apenas em alertas de emergência "
+                    + "(batimentos anormais ou saída da área segura). "
+                    + "A localização não é enviada continuamente."
+            ));
+
+            // ── Passo: GPS habilitado ─────────────────────────────────────────
+            // Não é uma runtime permission — exige que o usuário ative o GPS
+            // manualmente nas configurações do sistema.
+            passos.add(new Passo(
+                    TipoPasso.GPS_VERIFICACAO,
+                    null,
+                    REQ_GPS,
+                    "🛰️",
+                    "GPS ativado",
+                    "O GPS deve estar ligado para que o EverNear possa localizar você "
+                    + "em uma emergência e verificar se você está dentro da área segura.\n\n"
+                    + "Ative a localização na próxima tela."
+            ));
+        }
+
         // ── Último passo: isenção de otimização de bateria (ambos) ───────────
         passos.add(new Passo(
                 TipoPasso.BATERIA_OTIMIZACAO,
@@ -214,6 +250,9 @@ public class SetupPermissoesActivity extends AppCompatActivity {
         if (p.tipo == TipoPasso.BATERIA_OTIMIZACAO) {
             return estaIsentoOtimizacaoBateria();
         }
+        if (p.tipo == TipoPasso.GPS_VERIFICACAO) {
+            return LocationHelper.gpsHabilitado(this);
+        }
         return ContextCompat.checkSelfPermission(this, p.permissao)
                 == PackageManager.PERMISSION_GRANTED;
     }
@@ -229,13 +268,19 @@ public class SetupPermissoesActivity extends AppCompatActivity {
         tvNome.setText(p.titulo);
         tvDescricao.setText(p.descricao);
 
-        // Botão principal: texto varia conforme o tipo
-        btnPermitir.setText(p.tipo == TipoPasso.BATERIA_OTIMIZACAO
-                ? "Abrir configurações de bateria"
-                : "Conceder permissão");
+        // Botão principal: texto varia conforme o tipo de passo
+        if (p.tipo == TipoPasso.BATERIA_OTIMIZACAO) {
+            btnPermitir.setText("Abrir configurações de bateria");
+        } else if (p.tipo == TipoPasso.GPS_VERIFICACAO) {
+            btnPermitir.setText("Abrir configurações de localização");
+        } else {
+            btnPermitir.setText("Conceder permissão");
+        }
 
-        // Último passo não deve ter botão "Pular" (crítico para funcionamento)
-        btnPular.setAlpha(p.tipo == TipoPasso.BATERIA_OTIMIZACAO ? 0.4f : 1f);
+        // Passos críticos (bateria e GPS) não devem ter botão "Pular"
+        boolean critico = p.tipo == TipoPasso.BATERIA_OTIMIZACAO
+                || p.tipo == TipoPasso.GPS_VERIFICACAO;
+        btnPular.setAlpha(critico ? 0.4f : 1f);
     }
 
     private void executarPassoAtual() {
@@ -246,6 +291,15 @@ public class SetupPermissoesActivity extends AppCompatActivity {
             // Abre DIRETAMENTE o diálogo do sistema para esta permissão
             ActivityCompat.requestPermissions(this,
                     new String[]{p.permissao}, p.requestCode);
+        } else if (p.tipo == TipoPasso.GPS_VERIFICACAO) {
+            // Abre as configurações de localização do sistema
+            try {
+                startActivity(new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS));
+            } catch (Exception e) {
+                // Fallback: configurações gerais
+                try { startActivity(new Intent(Settings.ACTION_SETTINGS)); }
+                catch (Exception ex) { proximoPasso(); }
+            }
         } else {
             // Abre DIRETAMENTE a tela de bateria do sistema para este app
             abrirConfiguracaoBateria();
@@ -306,7 +360,7 @@ public class SetupPermissoesActivity extends AppCompatActivity {
     // ==================== Navegação final ==================================
 
     private void navegarParaTelaPrincipal() {
-        boolean ehPaciente = "patient".equals(userType) || "paciente".equals(userType);
+        boolean ehPaciente = FirebaseHelper.isPaciente(userType);
         Intent intent = new Intent(this,
                 ehPaciente ? PatientActivity.class : CaregiverActivity.class);
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);

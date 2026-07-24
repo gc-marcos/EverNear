@@ -28,6 +28,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <!-- Tipo "health" (paciente) — obrigatório targetSdk 34+ -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
+    <!-- Tipo "location" (paciente) — obrigatório targetSdk 34+ para acesso a GPS em background -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <!-- Tipo "dataSync" (cuidador) — obrigatório targetSdk 34+ -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
@@ -55,6 +57,28 @@
         quanto no celular (cuidador).
     -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
+    <!-- ── Localização (paciente) ────────────────────────────────────────────── -->
+    <!--
+        ACCESS_FINE_LOCATION: necessário para FusedLocationProviderClient obter
+        localização precisa (GPS) durante emergências e para a API de Geofence.
+        Obtida em runtime via SetupPermissoesActivity.
+    -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <!--
+        ACCESS_COARSE_LOCATION: declarado como fallback — alguns dispositivos
+        Wear OS entregam apenas localização via rede quando o GPS está obstruído.
+    -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!--
+        ACCESS_BACKGROUND_LOCATION: necessário para que a API de Geofence continue
+        funcionando com o app em segundo plano (API 29+).
+        NOTA: em API 29+ deve ser solicitada em runtime SEPARADAMENTE de
+        ACCESS_FINE_LOCATION e somente após esta ser concedida.
+        Em API 28 (Wear OS máx.) não é necessária — incluída apenas para que o
+        manifest seja válido em dispositivos com targetSdk >= 29.
+    -->
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
 
     <!-- ── Chamada telefônica ─────────────────────────────────────────────────── -->
     <uses-permission android:name="android.permission.CALL_PHONE" />
@@ -140,10 +164,18 @@
               reagendar via AlarmManager se necessário.
             • WakeLock (adquirido internamente) — mantém CPU ativa mesmo com tela apagada
         -->
+        <!--
+            foregroundServiceType="health|location":
+              - "health"    — uso do sensor cardíaco (obrigatório API 34+)
+              - "location"  — acesso a FusedLocationProviderClient e Geofence
+                              em emergências (obrigatório API 29+)
+            Ambos os tipos devem estar declarados para que o serviço acesse
+            localização em background sem SecurityException em Android 10+.
+        -->
         <service
             android:name=".HeartRateService"
             android:exported="false"
-            android:foregroundServiceType="health"
+            android:foregroundServiceType="health|location"
             android:stopWithTask="false" />
 
         <!--
@@ -178,6 +210,20 @@
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
+
+        <!--
+            Receptor de eventos de Geofence (paciente — zona segura).
+            Recebe a transição GEOFENCE_TRANSITION_EXIT do Google Play Services
+            via PendingIntent.getBroadcast() registrado em LocationHelper.registrarGeofence().
+            O receiver inicia o HeartRateService com ACTION_GEOFENCE_EXIT para que o
+            serviço obtenha a localização e dispare o alerta ao cuidador.
+
+            exported="false": o PendingIntent é criado pelo próprio app — não precisa
+            ser acessível por outros apps.
+        -->
+        <receiver
+            android:name=".GeofenceReceiver"
+            android:exported="false" />
 
         <!--
             Receptor de boot — reinicia o serviço correto quando o dispositivo é ligado.

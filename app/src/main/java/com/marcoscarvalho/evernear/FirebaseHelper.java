@@ -1,6 +1,9 @@
 package com.marcoscarvalho.evernear;
 
+import android.location.Location;
 import android.util.Log;
+
+import androidx.annotation.Nullable;
 
 import com.google.firebase.firestore.DocumentReference;
 import com.google.firebase.firestore.DocumentSnapshot;
@@ -75,6 +78,15 @@ public class FirebaseHelper {
         public static final String STATUS_MONITORAMENTO  = "statusMonitoramento";
         public static final String BATERIA_SMARTWATCH    = "bateriaSmartwatch";
         public static final String FCM_TOKEN             = "fcmToken";
+        // Localização de emergência — gravada apenas ao detectar anomalia ou saída de zona segura
+        public static final String LATITUDE              = "latitude";
+        public static final String LONGITUDE             = "longitude";
+        public static final String ACCURACY              = "accuracy";
+        public static final String LOCATION_TIMESTAMP    = "locationTimestamp";
+        // Zona segura configurada pelo cuidador
+        public static final String SAFE_ZONE_LATITUDE    = "safeZoneLatitude";
+        public static final String SAFE_ZONE_LONGITUDE   = "safeZoneLongitude";
+        public static final String SAFE_ZONE_RADIUS      = "safeZoneRadius";
         // alerts/{id}
         public static final String PACIENTE_ID           = "pacienteId";
         public static final String PACIENTE_NOME         = "pacienteNome";
@@ -509,6 +521,46 @@ public class FirebaseHelper {
                     callback.onResult(Boolean.TRUE.equals(acknowledged));
                 })
                 .addOnFailureListener(e -> callback.onResult(false));
+    }
+
+    /**
+     * Persiste a localização de emergência no documento do paciente.
+     *
+     * Campos gravados em {@code users/{uid}}:
+     *   latitude, longitude, accuracy, locationTimestamp
+     *
+     * Chamado por {@link LocationHelper} após obter a localização via
+     * FusedLocationProviderClient em eventos de emergência (anomalia cardíaca
+     * ou saída da zona segura). A operação é silenciosa em caso de falha —
+     * o alerta já foi disparado independentemente.
+     *
+     * @param uidPaciente UID do documento a atualizar
+     * @param location    objeto de localização do FusedLocationProviderClient
+     * @param callback    onResult(null) em sucesso; pode ser null para operação silenciosa
+     */
+    public static void salvarLocalizacaoEmergencia(String uidPaciente,
+                                                    Location location,
+                                                    @Nullable Callback<Void> callback) {
+        if (uidPaciente == null || uidPaciente.isEmpty() || location == null) return;
+
+        Map<String, Object> dados = new HashMap<>();
+        dados.put(Fields.LATITUDE,           location.getLatitude());
+        dados.put(Fields.LONGITUDE,          location.getLongitude());
+        dados.put(Fields.ACCURACY,           location.getAccuracy());
+        dados.put(Fields.LOCATION_TIMESTAMP, FieldValue.serverTimestamp());
+
+        db.collection("users").document(uidPaciente)
+                .update(dados)
+                .addOnSuccessListener(v -> {
+                    Log.d(TAG, "Localização de emergência salva: "
+                            + location.getLatitude() + ", " + location.getLongitude()
+                            + " ±" + location.getAccuracy() + " m");
+                    if (callback != null) callback.onResult(null);
+                })
+                .addOnFailureListener(e -> {
+                    Log.w(TAG, "Falha ao salvar localização: " + e.getMessage());
+                    if (callback != null) callback.onError(e);
+                });
     }
 
     /**

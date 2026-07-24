@@ -35,6 +35,7 @@ dependencies {
 
     implementation(libs.firebase.messaging)
     implementation(libs.play.services.wearable)
+    implementation("com.google.android.gms:play-services-location:21.3.0")
     implementation(libs.appcompat)
     implementation(libs.material)
     implementation(libs.activity)

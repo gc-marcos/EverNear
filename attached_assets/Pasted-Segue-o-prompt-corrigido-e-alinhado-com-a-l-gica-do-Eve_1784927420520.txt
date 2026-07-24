@@ -1,0 +1,125 @@
+Segue o prompt corrigido e alinhado com a lógica do EverNear, evitando envio contínuo da localização e preservando bateria e uso do Firebase.
+
+---
+
+# Implementação de Geolocalização no Aplicativo do Paciente (EverNear)
+
+## Objetivo
+
+Implementar o recurso de geolocalização no aplicativo do paciente para que sua localização seja enviada ao Firebase **apenas em situações de emergência**, reduzindo o consumo de bateria e evitando gravações desnecessárias no Firestore.
+
+---
+
+## Requisitos Funcionais
+
+### 1. Solicitação de permissões
+
+Assim que o aplicativo for aberto pela primeira vez após a instalação:
+
+* Solicitar a permissão de localização (`ACCESS_FINE_LOCATION`).
+* Explicar ao usuário que a localização é necessária para o funcionamento dos recursos de segurança do EverNear.
+
+---
+
+### 2. GPS obrigatório
+
+Antes de permitir o acesso ao aplicativo:
+
+* Verificar se o GPS está habilitado.
+* Caso esteja desativado:
+
+  * Informar que o EverNear necessita do GPS para proteger o paciente.
+  * Redirecionar o usuário para as configurações do dispositivo para ativar a localização.
+* O usuário **não poderá prosseguir para a tela principal enquanto o GPS não estiver ativado e a permissão de localização não for concedida**.
+
+---
+
+### 3. Validação inicial
+
+Antes de abrir o Dashboard do Paciente, validar:
+
+* Permissão de localização concedida.
+* GPS habilitado.
+
+Caso algum requisito não seja atendido, o aplicativo deverá permanecer na tela de configuração até que tudo esteja regularizado.
+
+---
+
+## Funcionamento da Geolocalização
+
+A localização **não deverá ser enviada continuamente** ao Firebase.
+
+Ela será obtida e enviada **somente quando ocorrer uma situação de emergência**, em um dos seguintes casos:
+
+### 1. Anomalia dos batimentos cardíacos
+
+Quando o `HeartRateService` detectar uma anomalia (frequência cardíaca fora dos limites configurados), o aplicativo deverá:
+
+* Obter a localização atual utilizando o `FusedLocationProviderClient`.
+* Enviar ao Firebase:
+
+  * Latitude
+  * Longitude
+  * Precisão (`accuracy`)
+  * Timestamp da coleta
+
+Essa localização será utilizada pelo cuidador durante o alerta de emergência.
+
+---
+
+### 2. Saída da área segura (Geofence)
+
+O cuidador poderá configurar um ponto de referência e um raio de segurança para o paciente.
+
+Sempre que o aplicativo detectar que o paciente saiu desse raio estabelecido, deverá:
+
+* Capturar a localização atual.
+* Enviar imediatamente a posição ao Firebase.
+* Registrar o evento de saída da área segura.
+* Disparar o alerta correspondente para o cuidador.
+
+---
+
+## Integração com o Firebase
+
+Criar ou reutilizar métodos no `FirebaseHelper` para atualizar a localização apenas quando ocorrer um dos eventos acima.
+
+Exemplo da estrutura:
+
+```text
+pacientes
+ └── {uid}
+      ├── latitude
+      ├── longitude
+      ├── accuracy
+      ├── locationTimestamp
+      └── ...
+```
+
+---
+
+## Requisitos Técnicos
+
+* Compatível com Android 9 (API 28), versão máxima suportada pelo projeto.
+* Utilizar `FusedLocationProviderClient` para obtenção da localização.
+* Centralizar toda a lógica em uma classe específica, como `LocationHelper` ou `LocationManager`, evitando duplicação de código.
+* O `HeartRateService` deverá apenas solicitar a localização quando um evento exigir, sem manter monitoramento contínuo por GPS.
+* Implementar tratamento para:
+
+  * Permissão negada.
+  * GPS desativado.
+  * Falha ao obter a localização.
+  * Ausência temporária de sinal de GPS.
+
+---
+
+## Objetivo Final
+
+Ao concluir a implementação:
+
+* O paciente somente poderá utilizar o aplicativo após conceder a permissão de localização e ativar o GPS.
+* A localização **não será enviada continuamente**, mas apenas em eventos críticos:
+
+  * Detecção de anomalia nos batimentos cardíacos.
+  * Saída do raio de segurança definido pelo cuidador.
+* A implementação deverá ser modular, reutilizável, de fácil manutenção e preparada para futuras evoluções, como histórico de deslocamentos, acompanhamento em tempo real durante uma emergência e integração com outros recursos de monitoramento.

@@ -457,9 +457,11 @@ public class CaregiverActivity extends AppCompatActivity {
         if (isFinishing() || isDestroyed()) return;
 
         String titulo;
-        if ("MANUAL".equals(tipo))    titulo = "🚨 EMERGÊNCIA acionada";
-        else if ("HIGH".equals(tipo)) titulo = "❤ Frequência ALTA";
-        else                          titulo = "💙 Frequência BAIXA";
+        if ("MANUAL".equals(tipo))       titulo = "🚨 EMERGÊNCIA acionada";
+        else if ("HIGH".equals(tipo))    titulo = "❤ Frequência ALTA";
+        else if ("LOW".equals(tipo))     titulo = "💙 Frequência BAIXA";
+        else if ("SAIDA_ZONA".equals(tipo)) titulo = "📍 Saída da área segura";
+        else                             titulo = "⚠ Alerta";
 
         String msg = (paciente != null ? paciente : "Paciente")
                 + "\n\nBPM: " + bpm + "\nTipo: " + tipo;

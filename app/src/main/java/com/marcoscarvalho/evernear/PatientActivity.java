@@ -73,6 +73,14 @@ public class PatientActivity extends AppCompatActivity implements HeartRateMonit
     @Override
     protected void onResume() {
         super.onResume();
+
+        // Valida pré-requisitos de localização antes de iniciar o serviço.
+        // Cobre o caso em que o usuário desativou o GPS após o setup inicial.
+        if (!LocationHelper.temPermissao(this) || !LocationHelper.gpsHabilitado(this)) {
+            mostrarDialogGpsNecessario();
+            return;
+        }
+
         HeartRateService.setActivityListener(this);
         // Permissões já foram solicitadas em SetupPermissoesActivity — inicia o serviço diretamente
         iniciarServico();
@@ -90,6 +98,46 @@ public class PatientActivity extends AppCompatActivity implements HeartRateMonit
         HeartRateService.setActivityListener(null);
         // Remove a flag ao sair da tela — o serviço continua calibrando em background
         manterTelaAcesa(false);
+    }
+
+    /**
+     * Exibe diálogo bloqueante quando GPS ou permissão de localização estão indisponíveis.
+     *
+     * "Abrir configurações" → leva o usuário às configurações de localização do sistema.
+     * "Voltar" → encerra a Activity (o paciente não pode usar o app sem GPS).
+     *
+     * Quando o usuário volta das configurações, {@code onResume()} é chamado novamente
+     * e verifica se as condições foram atendidas.
+     */
+    private void mostrarDialogGpsNecessario() {
+        if (isFinishing() || isDestroyed()) return;
+
+        boolean semPermissao = !LocationHelper.temPermissao(this);
+        boolean gpsDesligado = !LocationHelper.gpsHabilitado(this);
+
+        String mensagem;
+        if (semPermissao && gpsDesligado) {
+            mensagem = "O EverNear precisa da permissão de localização e do GPS ativado "
+                    + "para proteger você em emergências.\n\n"
+                    + "Conceda a permissão e ative o GPS para continuar.";
+        } else if (semPermissao) {
+            mensagem = "A permissão de localização não foi concedida.\n\n"
+                    + "Acesse as configurações do app para concedê-la.";
+        } else {
+            mensagem = "O GPS está desativado.\n\n"
+                    + "Ative a localização para que o EverNear possa protegê-lo "
+                    + "em emergências.";
+        }
+
+        new androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("📍 Localização necessária")
+                .setMessage(mensagem)
+                .setCancelable(false)
+                .setPositiveButton("Abrir configurações", (d, w) ->
+                        startActivity(new android.content.Intent(
+                                android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS)))
+                .setNegativeButton("Voltar", (d, w) -> finish())
+                .show();
     }
 
     // ==================== Calibração ====================

@@ -71,10 +71,12 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
     private static final String TAG = "HeartRateService";
 
     // ── Actions ───────────────────────────────────────────────────────────────
-    public static final String ACTION_CALIBRAR = "com.marcoscarvalho.evernear.ACTION_CALIBRAR";
-    public static final String ACTION_PARAR    = "com.marcoscarvalho.evernear.ACTION_PARAR";
+    public static final String ACTION_CALIBRAR      = "com.marcoscarvalho.evernear.ACTION_CALIBRAR";
+    public static final String ACTION_PARAR         = "com.marcoscarvalho.evernear.ACTION_PARAR";
     /** Disparado pelo AlarmManager para verificar e escalar alerta não confirmado. */
-    public static final String ACTION_ESCALAR  = "com.marcoscarvalho.evernear.ACTION_ESCALAR";
+    public static final String ACTION_ESCALAR       = "com.marcoscarvalho.evernear.ACTION_ESCALAR";
+    /** Disparado pelo GeofenceReceiver quando o paciente sai da zona segura. */
+    public static final String ACTION_GEOFENCE_EXIT = "com.marcoscarvalho.evernear.ACTION_GEOFENCE_EXIT";
 
     // ── Extras para ACTION_ESCALAR ────────────────────────────────────────────
     private static final String EXTRA_ALERTA_ID      = "alertaId";
@@ -155,6 +157,9 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
     private ListenerRegistration pacienteDataListener;
     private boolean              monitorIniciado      = false;
 
+    // Geofence — PendingIntent reutilizado para registro e remoção
+    private PendingIntent geofencePendingIntent;
+
     // ── Watchdog do serviço — estado ──────────────────────────────────────────
     /** Timestamp da última leitura recebida via onHeartRate(). Atualizado em bgThread. */
     private volatile long lastHeartRateReceivedTime = System.currentTimeMillis();
@@ -211,6 +216,12 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
             if (ACTION_PARAR.equals(action)) {
                 pararServico();
                 return START_NOT_STICKY;
+            }
+
+            // Saída da zona segura — dispara pelo GeofenceReceiver
+            if (ACTION_GEOFENCE_EXIT.equals(action)) {
+                tratarSaidaGeofence();
+                return START_STICKY;
             }
 
             // Escalada via AlarmManager — dispara mesmo com tela apagada (Doze)
@@ -388,6 +399,24 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
                         }
                         Log.d(TAG, "Paciente: " + nomePaciente
                                 + " | Cuidadores: " + cuidadoresVinculados.size());
+
+                        // Zona segura configurada pelo cuidador
+                        // Todos os três campos devem estar presentes e válidos
+                        Double safeZoneLat    = doc.getDouble(FirebaseHelper.Fields.SAFE_ZONE_LATITUDE);
+                        Double safeZoneLng    = doc.getDouble(FirebaseHelper.Fields.SAFE_ZONE_LONGITUDE);
+                        Double safeZoneRadius = doc.getDouble(FirebaseHelper.Fields.SAFE_ZONE_RADIUS);
+
+                        if (safeZoneLat != null && safeZoneLng != null
+                                && safeZoneRadius != null && safeZoneRadius > 0) {
+                            LocationHelper.registrarGeofence(
+                                    HeartRateService.this,
+                                    safeZoneLat, safeZoneLng,
+                                    safeZoneRadius.floatValue(),
+                                    obterGeofencePendingIntent());
+                        } else {
+                            // Cuidador removeu (ou ainda não configurou) a zona segura
+                            LocationHelper.removerGeofence(HeartRateService.this);
+                        }
                     }
                     if (!monitorIniciado) { monitorIniciado = true; iniciarMonitor(); }
                 });
@@ -413,6 +442,7 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
         if (uidPaciente != null) {
             FirebaseHelper.salvarStatusMonitoramento(uidPaciente, "PARADO");
         }
+        LocationHelper.removerGeofence(this);
         if (monitor != null) monitor.parar();
         stopForeground(true);
         stopSelf();
@@ -641,6 +671,12 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
         notifManager.notify(NOTIF_ID + 1,
                 buildAlertNotification(tituloLocal, nomePaciente + ": " + bpm + " bpm"));
 
+        // Obtém localização e salva no Firestore em paralelo com o alerta.
+        // Fire-and-forget: o alerta é enviado imediatamente sem aguardar o GPS.
+        if (uidPaciente != null) {
+            LocationHelper.obterESalvarLocalizacao(this, uidPaciente);
+        }
+
         if (cuidadoresVinculados.isEmpty()) {
             Log.w(TAG, "Anomalia sem cuidadores vinculados — somente alerta local");
             return;
@@ -702,6 +738,49 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
         HeartRateMonitor.Listener act = getActivityListener();
         if (act != null) act.onNecessarioReiniciar();
         reiniciarMonitor();
+    }
+
+    // ==================== Geofence (zona segura) ====================
+
+    /**
+     * Retorna (ou cria) o PendingIntent de broadcast para a API de Geofence.
+     *
+     * FLAG_UPDATE_CURRENT: reutiliza o mesmo PendingIntent em re-registros (evita leak).
+     * FLAG_IMMUTABLE: obrigatório para targets API 31+ (PendingIntent.FLAG_MUTABLE
+     * não é necessário aqui pois não alteramos os extras do Intent).
+     */
+    private PendingIntent obterGeofencePendingIntent() {
+        if (geofencePendingIntent == null) {
+            Intent intent = new Intent(this, GeofenceReceiver.class);
+            geofencePendingIntent = PendingIntent.getBroadcast(
+                    this, 200, intent,
+                    PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        }
+        return geofencePendingIntent;
+    }
+
+    /**
+     * Trata saída da zona segura detectada pelo sistema de Geofence.
+     *
+     * Fluxo:
+     *  1. Obtém localização atual e salva no Firestore (fire-and-forget).
+     *  2. Dispara alerta "SAIDA_ZONA" para todos os cuidadores (mesma cadeia
+     *     de escalada usada para anomalias cardíacas).
+     */
+    private void tratarSaidaGeofence() {
+        Log.w(TAG, "Saída da zona segura — obtendo localização e enviando alerta");
+
+        if (uidPaciente != null) {
+            LocationHelper.obterESalvarLocalizacao(this, uidPaciente);
+        }
+
+        if (uidPaciente == null || cuidadoresVinculados.isEmpty()) {
+            Log.w(TAG, "Saída da zona segura: dados do paciente ausentes — alerta omitido");
+            return;
+        }
+
+        // Passa bpm=0 pois não é relevante para alertas de geofence
+        enviarAlertaParaCuidador(0, 0, "SAIDA_ZONA");
     }
 
     // ==================== Escalada de alertas ====================
