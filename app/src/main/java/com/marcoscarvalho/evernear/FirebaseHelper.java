@@ -539,8 +539,8 @@ public class FirebaseHelper {
      * @param callback    onResult(null) em sucesso; pode ser null para operação silenciosa
      */
     public static void salvarLocalizacaoEmergencia(String uidPaciente,
-                                                    Location location,
-                                                    @Nullable Callback<Void> callback) {
+                                                   Location location,
+                                                   @Nullable Callback<Void> callback) {
         if (uidPaciente == null || uidPaciente.isEmpty() || location == null) return;
 
         Map<String, Object> dados = new HashMap<>();
@@ -561,41 +561,6 @@ public class FirebaseHelper {
                     Log.w(TAG, "Falha ao salvar localização: " + e.getMessage());
                     if (callback != null) callback.onError(e);
                 });
-    }
-
-    /**
-     * Obtém o token FCM atual e persiste no Firestore do paciente.
-     *
-     * Cobre dois cenários onde {@code onNewToken()} do MessagingService pode não ter
-     * sido chamado:
-     *  1. O dispositivo estava sem rede quando o token foi gerado/rotacionado.
-     *  2. O processo foi morto pelo OEM antes de {@code onNewToken()} executar.
-     *
-     * Chamado em {@link HeartRateService#iniciarMonitor()} a cada arranque do serviço,
-     * garantindo que a Cloud Function "acordarPacientes" sempre tenha um token válido.
-     * A operação é silenciosa em caso de falha — o serviço não é interrompido por isso.
-     *
-     * Compatível com API 28 (Wear OS): {@link FirebaseMessaging#getToken()} está
-     * disponível em firebase-messaging ≥ 21.0.0, sem dependência de API de SO.
-     *
-     * @param uidPaciente UID do documento {@code users/{uid}} a ser atualizado.
-     */
-    public static void sincronizarFcmToken(String uidPaciente) {
-        if (uidPaciente == null || uidPaciente.isEmpty()) return;
-
-        FirebaseMessaging.getInstance().getToken()
-                .addOnSuccessListener(token -> {
-                    if (token == null || token.isEmpty()) return;
-
-                    db.collection("users").document(uidPaciente)
-                            .update(Fields.FCM_TOKEN, token)
-                            .addOnFailureListener(e ->
-                                    Log.w(TAG, "sincronizarFcmToken: falha ao persistir token: "
-                                            + e.getMessage()));
-                })
-                .addOnFailureListener(e ->
-                        Log.w(TAG, "sincronizarFcmToken: falha ao obter token FCM: "
-                                + e.getMessage()));
     }
 
     /**

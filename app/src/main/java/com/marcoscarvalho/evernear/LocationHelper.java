@@ -6,6 +6,7 @@ import android.content.Context;
 import android.content.pm.PackageManager;
 import android.location.Location;
 import android.location.LocationManager;
+import android.os.HandlerThread;
 import android.os.Looper;
 import android.util.Log;
 
@@ -23,6 +24,7 @@ import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.location.Priority;
 
 import java.util.Collections;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Centraliza toda a lógica de geolocalização do EverNear.
@@ -49,10 +51,15 @@ public final class LocationHelper {
     private static final String TAG = "LocationHelper";
 
     /**
-     * Timeout para aguardar localização nova quando {@code getLastLocation()} retorna null.
-     * 8 s é suficiente para o GPS obter fix indoor em condições normais.
+     * Timeout para cada request de localização paralelo.
+     * 20 s cobre GPS a frio em indoor (cold start típico: 10–15 s).
      */
-    private static final long LOCATION_TIMEOUT_MS = 8_000L;
+    private static final long LOCATION_TIMEOUT_MS = 20_000L;
+
+    /**
+     * Intervalo de entrega dos updates de localização (mínimo 1 s entre callbacks).
+     */
+    private static final long LOCATION_INTERVAL_MS = 2_000L;
 
     /**
      * ID do Geofence — único por paciente, substituído a cada atualização de zona segura.
@@ -93,52 +100,50 @@ public final class LocationHelper {
     // ==================== Localização única (emergência) ====================
 
     /**
-     * Obtém a localização atual uma única vez e persiste no Firestore do paciente.
+     * Obtém a localização atual e persiste no Firestore do paciente.
      *
-     * ┌─ Estratégia de obtenção ───────────────────────────────────────────────┐
-     * │  1. {@code getLastLocation()} — rápido, sem liga o GPS se já houver    │
-     * │     um fix recente em cache.                                            │
-     * │  2. Se nulo, solicita leitura nova via {@code requestLocationUpdates()} │
-     * │     com timeout de 8 s e {@code setMaxUpdates(1)} — cancela sozinho    │
-     * │     após a primeira leitura.                                            │
+     * ┌─ Estratégia ───────────────────────────────────────────────────────────┐
+     * │  1. getLastLocation() — usa cache do FusedLocation (0 ms, sem GPS).   │
+     * │  2. Se nulo: dispara DOIS requests em paralelo e o primeiro que         │
+     * │     retornar um fix não-nulo ganha (AtomicBoolean evita dupla escrita). │
+     * │     • BALANCED_POWER (rede/Wi-Fi/BT) — rápido, funciona indoor.       │
+     * │     • HIGH_ACCURACY (GPS) — preciso, funciona outdoor.                 │
+     * │  Ambos têm timeout de LOCATION_TIMEOUT_MS (20 s).                      │
      * └────────────────────────────────────────────────────────────────────────┘
      *
-     * Deve ser chamado em PARALELO com o envio do alerta — não bloqueia o alerta.
-     * Falhas são logadas silenciosamente; o alerta é enviado independentemente.
-     *
-     * @param context     contexto do serviço (não deve ser Activity já destruída)
-     * @param uidPaciente UID do documento {@code users/{uid}} a ser atualizado
+     * Fire-and-forget: o alerta é enviado antes desta chamada retornar.
+     * A verificação de GPS habilitado é omitida intencionalmente — o
+     * FusedLocationProviderClient lida com isso internamente e o NETWORK
+     * provider pode entregar localização mesmo sem GPS ativo.
      */
     public static void obterESalvarLocalizacao(Context context, String uidPaciente) {
         if (uidPaciente == null || uidPaciente.isEmpty()) return;
         if (!temPermissao(context)) {
-            Log.w(TAG, "obterESalvarLocalizacao: permissão negada — localização omitida do alerta");
-            return;
-        }
-        if (!gpsHabilitado(context)) {
-            Log.w(TAG, "obterESalvarLocalizacao: GPS desabilitado — localização omitida do alerta");
+            Log.w(TAG, "obterESalvarLocalizacao: ACCESS_FINE_LOCATION negada"
+                    + " — conceda a permissão em Configurações → Apps → EverNear → Permissões");
             return;
         }
 
-        FusedLocationProviderClient client = LocationServices.getFusedLocationProviderClient(context);
+        FusedLocationProviderClient client =
+                LocationServices.getFusedLocationProviderClient(context);
 
         try {
             client.getLastLocation()
-                    .addOnSuccessListener(location -> {
-                        if (location != null) {
+                    .addOnSuccessListener(cached -> {
+                        if (cached != null) {
                             Log.d(TAG, "Localização (cache): "
-                                    + location.getLatitude() + ", " + location.getLongitude()
-                                    + " ±" + location.getAccuracy() + " m");
-                            FirebaseHelper.salvarLocalizacaoEmergencia(uidPaciente, location, null);
+                                    + cached.getLatitude() + ", " + cached.getLongitude()
+                                    + " ±" + cached.getAccuracy() + " m");
+                            FirebaseHelper.salvarLocalizacaoEmergencia(uidPaciente, cached, null);
                         } else {
-                            Log.d(TAG, "getLastLocation() nulo — solicitando leitura nova");
-                            solicitarLocalizacaoNova(context, client, uidPaciente);
+                            Log.d(TAG, "Cache vazio — disparando requests paralelos (rede + GPS)");
+                            dispararRequestsParalelos(client, uidPaciente);
                         }
                     })
                     .addOnFailureListener(e -> {
-                        Log.w(TAG, "getLastLocation() falhou: " + e.getMessage()
-                                + " — solicitando leitura nova");
-                        solicitarLocalizacaoNova(context, client, uidPaciente);
+                        Log.w(TAG, "getLastLocation() falhou (" + e.getMessage()
+                                + ") — disparando requests paralelos");
+                        dispararRequestsParalelos(client, uidPaciente);
                     });
         } catch (SecurityException e) {
             Log.e(TAG, "SecurityException em getLastLocation: " + e.getMessage());
@@ -146,51 +151,105 @@ public final class LocationHelper {
     }
 
     /**
-     * Solicita uma leitura nova de localização quando o cache está vazio.
+     * Dispara DOIS requests de localização em paralelo: rede/Wi-Fi e GPS.
      *
-     * {@code setMaxUpdates(1)} garante cancelamento automático após a primeira leitura;
-     * {@code setDurationMillis(LOCATION_TIMEOUT_MS)} cancela por timeout se não houver sinal.
+     * O primeiro que entregar um fix não-nulo salva no Firestore.
+     * O {@link AtomicBoolean} garante que apenas uma escrita ocorra mesmo
+     * que ambos respondam quase simultaneamente.
+     *
+     * Por que paralelo e não sequencial?
+     * - Sequential: stage 2 só inicia se stage 1 retornar callback com null.
+     *   Mas FusedLocation não chama o callback com null em timeout — simplesmente
+     *   não chama. Então stage 2 nunca iniciaria por timeout de stage 1.
+     * - Parallel: ambos correm desde o início; o mais rápido ganha.
+     *   Rede/Wi-Fi geralmente responde em 2–5 s; GPS pode levar 10–20 s.
      */
-    private static void solicitarLocalizacaoNova(Context context,
-                                                   FusedLocationProviderClient client,
-                                                   String uidPaciente) {
-        LocationRequest request = new LocationRequest.Builder(
-                Priority.PRIORITY_HIGH_ACCURACY, 2_000L)
+    private static void dispararRequestsParalelos(FusedLocationProviderClient client,
+                                                  String uidPaciente) {
+        // Flag compartilhada: só a primeira resposta não-nula salva no Firestore.
+        // AtomicBoolean porque callbacks de providers distintos podem chegar
+        // em threads diferentes no FusedLocation interno.
+        final AtomicBoolean salvo = new AtomicBoolean(false);
+
+        iniciarRequest(client, uidPaciente,
+                Priority.PRIORITY_BALANCED_POWER_ACCURACY, "rede/Wi-Fi", salvo);
+
+        iniciarRequest(client, uidPaciente,
+                Priority.PRIORITY_HIGH_ACCURACY, "GPS", salvo);
+    }
+
+    /**
+     * Cria e registra um único LocationRequest.
+     *
+     * ┌─ Por que HandlerThread em vez de Looper.getMainLooper()? ─────────────┐
+     * │  No Wear OS, quando a tela apaga, o Android pode throttle a entrega   │
+     * │  de mensagens ao main looper para economizar energia. Usar um          │
+     * │  HandlerThread dedicado com prioridade FOREGROUND garante que os       │
+     * │  callbacks de localização continuem sendo entregues mesmo com a tela  │
+     * │  apagada, essencial para localização de emergência.                    │
+     * └────────────────────────────────────────────────────────────────────────┘
+     *
+     * @param priority  {@link Priority#PRIORITY_BALANCED_POWER_ACCURACY} ou
+     *                  {@link Priority#PRIORITY_HIGH_ACCURACY}
+     * @param nome      rótulo para log (ex.: "rede/Wi-Fi", "GPS")
+     * @param salvo     flag compartilhada entre requests paralelos
+     */
+    private static void iniciarRequest(FusedLocationProviderClient client,
+                                       String uidPaciente,
+                                       int priority,
+                                       String nome,
+                                       AtomicBoolean salvo) {
+        LocationRequest request = new LocationRequest.Builder(priority, LOCATION_INTERVAL_MS)
                 .setMinUpdateIntervalMillis(1_000L)
                 .setMaxUpdates(1)
                 .setDurationMillis(LOCATION_TIMEOUT_MS)
                 .build();
 
-        // Wrapper de flag: evita processar resultado duplicado se o callback disparar
-        // duas vezes antes de removeLocationUpdates() completar.
-        final boolean[] entregue = {false};
+        // HandlerThread dedicado para receber callbacks de localização.
+        // Sobrevive ao throttling do main looper quando a tela apaga.
+        HandlerThread locationThread = new HandlerThread(
+                "EverNear-LocationThread-" + nome,
+                android.os.Process.THREAD_PRIORITY_FOREGROUND);
+        locationThread.start();
+        Looper locationLooper = locationThread.getLooper();
 
         LocationCallback callback = new LocationCallback() {
             @Override
             public void onLocationResult(@NonNull LocationResult result) {
-                if (entregue[0]) return;
-                entregue[0] = true;
-
-                Location location = result.getLastLocation();
-                if (location != null) {
-                    Log.d(TAG, "Localização (nova): "
-                            + location.getLatitude() + ", " + location.getLongitude()
-                            + " ±" + location.getAccuracy() + " m");
-                    FirebaseHelper.salvarLocalizacaoEmergencia(uidPaciente, location, null);
-                } else {
-                    Log.w(TAG, "Leitura nova retornou null — sem sinal de GPS");
+                Location loc = result.getLastLocation();
+                if (loc == null) {
+                    Log.w(TAG, nome + ": onLocationResult com loc=null — ignorando");
+                    pararThread(locationThread);
+                    return;
                 }
-                // Remove updates imediatamente; setMaxUpdates(1) já faz isso,
-                // mas removeLocationUpdates é redundância de segurança.
+                // compareAndSet(false, true): só o primeiro thread que chegar aqui salva
+                if (!salvo.compareAndSet(false, true)) {
+                    Log.d(TAG, nome + ": outro provider já salvou — descartando");
+                    try { client.removeLocationUpdates(this); } catch (Exception ignored) {}
+                    pararThread(locationThread);
+                    return;
+                }
+                Log.d(TAG, nome + ": " + loc.getLatitude() + ", " + loc.getLongitude()
+                        + " ±" + loc.getAccuracy() + " m — salvando no Firestore");
+                FirebaseHelper.salvarLocalizacaoEmergencia(uidPaciente, loc, null);
                 try { client.removeLocationUpdates(this); } catch (Exception ignored) {}
+                pararThread(locationThread);
             }
         };
 
         try {
-            client.requestLocationUpdates(request, callback, Looper.getMainLooper());
+            client.requestLocationUpdates(request, callback, locationLooper);
+            Log.d(TAG, "Request " + nome + " iniciado (timeout=" + LOCATION_TIMEOUT_MS / 1000
+                    + "s, looper=LocationThread)");
         } catch (SecurityException e) {
-            Log.e(TAG, "SecurityException em requestLocationUpdates: " + e.getMessage());
+            Log.e(TAG, "SecurityException ao iniciar request " + nome + ": " + e.getMessage());
+            pararThread(locationThread);
         }
+    }
+
+    /** Para o HandlerThread de localização de forma segura após uso. */
+    private static void pararThread(HandlerThread thread) {
+        try { thread.quitSafely(); } catch (Exception ignored) {}
     }
 
     // ==================== Geofence (zona segura) ====================
@@ -213,10 +272,10 @@ public final class LocationHelper {
      *                       {@code FLAG_UPDATE_CURRENT | FLAG_IMMUTABLE}
      */
     public static void registrarGeofence(Context context,
-                                          double latitude,
-                                          double longitude,
-                                          float raioMetros,
-                                          PendingIntent pendingIntent) {
+                                         double latitude,
+                                         double longitude,
+                                         float raioMetros,
+                                         PendingIntent pendingIntent) {
         if (!temPermissao(context)) {
             Log.w(TAG, "registrarGeofence: permissão negada — geofence não registrado");
             return;

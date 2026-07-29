@@ -197,25 +197,10 @@
 
             <Button
                 android:id="@+id/btn_call"
-                android:layout_width="0dp"
+                android:layout_width="match_parent"
                 android:layout_height="44dp"
-                android:layout_weight="1"
                 android:background="@drawable/bg_caregiver_button_primary"
                 android:text="@string/caregiver_call_button"
-                android:textColor="@color/caregiver_text_primary"
-                android:textStyle="bold" />
-
-            <Space
-                android:layout_width="12dp"
-                android:layout_height="wrap_content" />
-
-            <Button
-                android:id="@+id/btn_map"
-                android:layout_width="0dp"
-                android:layout_height="44dp"
-                android:layout_weight="1"
-                android:background="@drawable/bg_caregiver_button_secondary"
-                android:text="@string/caregiver_map_button"
                 android:textColor="@color/caregiver_text_primary"
                 android:textStyle="bold" />
         </LinearLayout>

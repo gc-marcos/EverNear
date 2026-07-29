@@ -49,6 +49,7 @@ public class SetupPermissoesActivity extends AppCompatActivity {
     private static final int REQ_ACTIVITY_RECOGNITION     = 3004;
     private static final int REQ_BATERIA                  = 3005;
     private static final int REQ_LOCALIZACAO              = 3006;
+    private static final int REQ_LOCALIZACAO_BACKGROUND   = 3008;
     private static final int REQ_GPS                      = 3007;
 
     // ── Tipos de passo ─────────────────────────────────────────────────────
@@ -141,8 +142,8 @@ public class SetupPermissoesActivity extends AppCompatActivity {
                     "🔔",
                     "Notificações",
                     ehPaciente
-                        ? "Exibe alertas de frequência cardíaca anormal diretamente na tela do relógio."
-                        : "Envia alertas de emergência do paciente mesmo com o celular em repouso."
+                            ? "Exibe alertas de frequência cardíaca anormal diretamente na tela do relógio."
+                            : "Envia alertas de emergência do paciente mesmo com o celular em repouso."
             ));
         }
 
@@ -185,7 +186,7 @@ public class SetupPermissoesActivity extends AppCompatActivity {
         }
 
         if (ehPaciente) {
-            // ── Passo: permissão de localização ──────────────────────────────
+            // ── Passo: permissão de localização (precisão fina) ─────────────
             // ACCESS_FINE_LOCATION é runtime permission desde API 23.
             // Necessária para FusedLocationProviderClient e para a API de Geofence.
             passos.add(new Passo(
@@ -195,9 +196,27 @@ public class SetupPermissoesActivity extends AppCompatActivity {
                     "📍",
                     "Localização de emergência",
                     "Permite ao EverNear obter sua posição apenas em alertas de emergência "
-                    + "(batimentos anormais ou saída da área segura). "
-                    + "A localização não é enviada continuamente."
+                            + "(batimentos anormais ou saída da área segura). "
+                            + "A localização não é enviada continuamente."
             ));
+
+            // ── Passo: localização em segundo plano (API 29+) ─────────────────
+            // ACCESS_BACKGROUND_LOCATION é obrigatório no Android 10+ para que a
+            // API de Geofence dispare eventos quando o app está em segundo plano.
+            // Sem esta permissão, o GeofenceReceiver nunca é chamado com app fechado.
+            // Deve ser solicitada DEPOIS de ACCESS_FINE_LOCATION já estar concedida.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                passos.add(new Passo(
+                        TipoPasso.PERMISSAO_RUNTIME,
+                        Manifest.permission.ACCESS_BACKGROUND_LOCATION,
+                        REQ_LOCALIZACAO_BACKGROUND,
+                        "🗺️",
+                        "Localização em segundo plano",
+                        "Permite verificar a área segura mesmo com o app fechado. "
+                                + "Na próxima tela, selecione \"Permitir sempre\" para que o "
+                                + "EverNear detecte saídas da zona segura mesmo com tela apagada."
+                ));
+            }
 
             // ── Passo: GPS habilitado ─────────────────────────────────────────
             // Não é uma runtime permission — exige que o usuário ative o GPS
@@ -209,8 +228,8 @@ public class SetupPermissoesActivity extends AppCompatActivity {
                     "🛰️",
                     "GPS ativado",
                     "O GPS deve estar ligado para que o EverNear possa localizar você "
-                    + "em uma emergência e verificar se você está dentro da área segura.\n\n"
-                    + "Ative a localização na próxima tela."
+                            + "em uma emergência e verificar se você está dentro da área segura.\n\n"
+                            + "Ative a localização na próxima tela."
             ));
         }
 
@@ -222,8 +241,8 @@ public class SetupPermissoesActivity extends AppCompatActivity {
                 "⚡",
                 ehPaciente ? "Monitoramento em segundo plano" : "Alertas em segundo plano",
                 ehPaciente
-                    ? "Permite que o EverNear continue monitorando mesmo com o app fechado.\n\nSelecione \"Não otimizar\" na próxima tela."
-                    : "Garante que você receba alertas do paciente mesmo com o app completamente fechado.\n\nSelecione \"Não otimizar\" na próxima tela."
+                        ? "Permite que o EverNear continue monitorando mesmo com o app fechado.\n\nSelecione \"Não otimizar\" na próxima tela."
+                        : "Garante que você receba alertas do paciente mesmo com o app completamente fechado.\n\nSelecione \"Não otimizar\" na próxima tela."
         ));
     }
 
@@ -315,7 +334,7 @@ public class SetupPermissoesActivity extends AppCompatActivity {
 
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
-                                            @NonNull int[] grantResults) {
+                                           @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         // Independente de concedido ou negado, avança para o próximo passo
         proximoPasso();

@@ -7,8 +7,11 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
+import android.location.LocationManager;
 import android.os.Build;
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -85,8 +88,21 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
     private static final String EXTRA_TIPO           = "tipo";
 
     // ── Canais de notificação ─────────────────────────────────────────────────
-    private static final String CHANNEL_ID = "evernear_monitor";
-    private static final int    NOTIF_ID   = 1001;
+    private static final String CHANNEL_ID   = "evernear_monitor";
+    private static final int    NOTIF_ID     = 1001;
+    /** ID da notificação de aviso de GPS desativado. */
+    private static final int    NOTIF_ID_GPS = 1003;
+
+    /**
+     * Broadcast enviado para a PatientActivity quando o GPS é desativado
+     * enquanto o serviço está rodando. A Activity registra um receiver em
+     * onResume() para mostrar o diálogo bloqueante ao usuário.
+     */
+    public static final String ACTION_GPS_DESATIVADO  =
+            "com.marcoscarvalho.evernear.ACTION_GPS_DESATIVADO";
+    /** Broadcast enviado quando o GPS é reativado — cancela o aviso exibido. */
+    public static final String ACTION_GPS_REATIVADO   =
+            "com.marcoscarvalho.evernear.ACTION_GPS_REATIVADO";
 
     // ── Escalada ──────────────────────────────────────────────────────────────
     private static final long ESCALADA_MS = 5 * 60 * 1000L;
@@ -141,6 +157,16 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
     private HeartRateMonitor      monitor;
     private NotificationManager   notifManager;
     private PowerManager.WakeLock wakeLock;
+
+    // ── Receivers de sistema ──────────────────────────────────────────────────
+    /** Monitora mudança de estado do GPS (liga/desliga nas configurações do relógio). */
+    private BroadcastReceiver gpsStateReceiver;
+    /**
+     * Monitora apagamento da tela (ACTION_SCREEN_OFF).
+     * Garante que o WakeLock seja reacquirido imediatamente quando a tela apaga,
+     * antes que o sistema tente suspender a CPU.
+     */
+    private BroadcastReceiver screenOffReceiver;
 
     /**
      * HandlerThread dedicado para tarefas periódicas do serviço.
@@ -201,6 +227,8 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
         adquirirWakeLock();
         agendarRenovacaoWakeLock();
         agendarWatchdogExterno();
+        registrarGpsReceiver();
+        registrarScreenOffReceiver();
     }
 
     @Override
@@ -257,6 +285,7 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
         if (pacienteDataListener != null) pacienteDataListener.remove();
         if (monitor != null) monitor.parar();
         liberarWakeLock();
+        desregistrarReceivers();
         instance = null;
         super.onDestroy();
     }
@@ -337,6 +366,131 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
                 serviceBackgroundHandler.postDelayed(this, WAKELOCK_RENEWAL_MS);
             }
         }, WAKELOCK_RENEWAL_MS);
+    }
+
+    // ==================== Receivers de sistema ====================
+
+    /**
+     * Registra receiver para detectar mudanças no estado do GPS (liga/desliga).
+     *
+     * PROVIDERS_CHANGED_ACTION é disparado pelo sistema sempre que o usuário
+     * ativa ou desativa GPS nas configurações do relógio — mesmo com a tela
+     * do app apagada ou o app em background.
+     *
+     * Quando GPS é desativado:
+     *  1. Emite uma notificação de alta prioridade pedindo ao paciente que ligue o GPS.
+     *  2. Envia broadcast ACTION_GPS_DESATIVADO para a PatientActivity (se visível)
+     *     mostrar o diálogo bloqueante.
+     *
+     * Quando GPS é reativado: cancela a notificação de aviso.
+     */
+    private void registrarGpsReceiver() {
+        gpsStateReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                if (!LocationManager.PROVIDERS_CHANGED_ACTION.equals(intent.getAction())) return;
+
+                boolean gpsAtivo = LocationHelper.gpsHabilitado(context);
+
+                if (!gpsAtivo) {
+                    Log.w(TAG, "GPS desativado pelo usuário — localização de emergência indisponível");
+                    notificarGpsDesativado();
+                    // Avisa a PatientActivity se estiver visível (mostra diálogo bloqueante)
+                    sendBroadcast(new Intent(ACTION_GPS_DESATIVADO));
+                } else {
+                    Log.i(TAG, "GPS reativado — localização de emergência disponível");
+                    notifManager.cancel(NOTIF_ID_GPS);
+                    sendBroadcast(new Intent(ACTION_GPS_REATIVADO));
+                    // Restaura a notificação de monitoramento normal
+                    notifManager.notify(NOTIF_ID,
+                            buildNotification("Monitorando em segundo plano", "--"));
+                }
+            }
+        };
+        IntentFilter filtro = new IntentFilter(LocationManager.PROVIDERS_CHANGED_ACTION);
+        registerReceiver(gpsStateReceiver, filtro);
+        Log.d(TAG, "Receiver de estado do GPS registrado");
+    }
+
+    /**
+     * Registra receiver para ACTION_SCREEN_OFF.
+     *
+     * Em alguns Wear OS / OEMs agressivos (Huawei, Xiaomi), o sistema tenta
+     * suspender a CPU logo após a tela apagar, antes que o WakeLock do serviço
+     * tenha chance de agir. Ao receber este broadcast, reacquirimos o WakeLock
+     * imediatamente e agendamos o watchdog externo para garantir que o serviço
+     * continue ativo mesmo com tela apagada.
+     *
+     * ACTION_SCREEN_OFF só pode ser recebido por receivers registrados em código
+     * (não funciona com receivers declarados no manifest).
+     */
+    private void registrarScreenOffReceiver() {
+        screenOffReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                if (!Intent.ACTION_SCREEN_OFF.equals(intent.getAction())) return;
+                Log.d(TAG, "Tela apagada — garantindo WakeLock ativo para manutenção do serviço");
+                // Reacquire o WakeLock imediatamente para manter CPU ativa com tela apagada
+                try {
+                    if (wakeLock != null && !wakeLock.isHeld()) {
+                        wakeLock.acquire();
+                        Log.d(TAG, "WakeLock reacquirido após tela apagar");
+                    }
+                } catch (Exception e) {
+                    Log.w(TAG, "Erro ao reacquirir WakeLock após tela apagar: " + e.getMessage());
+                }
+                // Reagenda watchdog externo para garantir reinício se o processo for morto
+                agendarWatchdogExterno();
+            }
+        };
+        IntentFilter filtro = new IntentFilter(Intent.ACTION_SCREEN_OFF);
+        registerReceiver(screenOffReceiver, filtro);
+        Log.d(TAG, "Receiver de tela apagada registrado");
+    }
+
+    /** Desregistra todos os receivers de sistema ao encerrar o serviço. */
+    private void desregistrarReceivers() {
+        if (gpsStateReceiver != null) {
+            try { unregisterReceiver(gpsStateReceiver); } catch (Exception ignored) {}
+            gpsStateReceiver = null;
+        }
+        if (screenOffReceiver != null) {
+            try { unregisterReceiver(screenOffReceiver); } catch (Exception ignored) {}
+            screenOffReceiver = null;
+        }
+        Log.d(TAG, "Receivers de sistema desregistrados");
+    }
+
+    /**
+     * Emite notificação de alta prioridade avisando que o GPS foi desativado.
+     *
+     * Usa o canal de alertas (IMPORTANCE_HIGH) para garantir que o aviso
+     * apareça mesmo com a tela do relógio apagada. O intent ao clicar leva
+     * diretamente às configurações de localização do sistema.
+     */
+    private void notificarGpsDesativado() {
+        Intent abrirConfiguracoes = new Intent(
+                android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS);
+        abrirConfiguracoes.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        PendingIntent pi = PendingIntent.getActivity(this, 50, abrirConfiguracoes,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+
+        Notification notif = new NotificationCompat.Builder(this, CHANNEL_ID + "_alerta")
+                .setSmallIcon(R.drawable.ic_heart_heartbeat)
+                .setContentTitle("⚠️ GPS desativado")
+                .setContentText("Ative o GPS para que o EverNear possa enviar sua localização em emergências.")
+                .setStyle(new NotificationCompat.BigTextStyle()
+                        .bigText("O GPS foi desativado. Em caso de emergência, o EverNear não conseguirá enviar sua localização ao cuidador.\n\nToque para ativar o GPS."))
+                .setContentIntent(pi)
+                .setOngoing(false)
+                .setAutoCancel(false)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setCategory(NotificationCompat.CATEGORY_STATUS)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .build();
+
+        notifManager.notify(NOTIF_ID_GPS, notif);
+        Log.d(TAG, "Notificação de GPS desativado emitida");
     }
 
     // ==================== Inicialização ====================
@@ -873,6 +1027,10 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
 
     public void dispararEmergenciaManual(int bpm) {
         if (uidPaciente == null || cuidadoresVinculados.isEmpty()) return;
+
+        // Salva localização no Firestore em paralelo com o envio dos alertas,
+        // igual ao fluxo de anomalia cardíaca — fire-and-forget.
+        LocationHelper.obterESalvarLocalizacao(this, uidPaciente);
 
         int bpmMin = (monitor != null) ? monitor.getBpmMin() : -1;
         int bpmMax = (monitor != null) ? monitor.getBpmMax() : -1;

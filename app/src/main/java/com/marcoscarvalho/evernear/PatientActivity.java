@@ -1,6 +1,9 @@
 package com.marcoscarvalho.evernear;
 
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.os.Bundle;
@@ -38,6 +41,16 @@ public class PatientActivity extends AppCompatActivity implements HeartRateMonit
 
     // Controla se a tela deve ficar acesa (apenas durante calibração)
     private boolean telaAcesaParaCalibracao = false;
+
+    /**
+     * Receiver para detectar GPS desativado enquanto esta Activity está visível.
+     *
+     * Registrado em onResume() e removido em onPause().
+     * Quando o usuário desativa o GPS nas configurações do relógio enquanto o
+     * app está aberto na tela, este receiver dispara e exibe o diálogo bloqueante
+     * impedindo o uso do app sem GPS.
+     */
+    private BroadcastReceiver gpsDesativadoReceiver;
 
     /**
      * Último BPM recebido pelo callback onHeartRate().
@@ -90,6 +103,21 @@ public class PatientActivity extends AppCompatActivity implements HeartRateMonit
         if (svc != null && svc.getMonitor() != null && svc.getMonitor().isCalibrating()) {
             manterTelaAcesa(true);
         }
+
+        // Registra receiver para detectar GPS desativado enquanto esta tela está visível.
+        // Isso cobre o cenário: usuário abre configurações do relógio enquanto o app está
+        // visível e desativa o GPS → o diálogo bloqueante aparece imediatamente.
+        gpsDesativadoReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                if (HeartRateService.ACTION_GPS_DESATIVADO.equals(intent.getAction())) {
+                    // GPS foi desativado com esta Activity visível — exibe diálogo bloqueante
+                    mostrarDialogGpsNecessario();
+                }
+            }
+        };
+        IntentFilter filtro = new IntentFilter(HeartRateService.ACTION_GPS_DESATIVADO);
+        registerReceiver(gpsDesativadoReceiver, filtro);
     }
 
     @Override
@@ -98,6 +126,13 @@ public class PatientActivity extends AppCompatActivity implements HeartRateMonit
         HeartRateService.setActivityListener(null);
         // Remove a flag ao sair da tela — o serviço continua calibrando em background
         manterTelaAcesa(false);
+
+        // Remove o receiver de GPS — não é necessário enquanto a Activity não está visível
+        // (o HeartRateService ainda detecta mudanças e envia notificação ao paciente)
+        if (gpsDesativadoReceiver != null) {
+            try { unregisterReceiver(gpsDesativadoReceiver); } catch (Exception ignored) {}
+            gpsDesativadoReceiver = null;
+        }
     }
 
     /**

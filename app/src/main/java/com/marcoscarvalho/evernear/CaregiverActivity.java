@@ -49,6 +49,9 @@ public class CaregiverActivity extends AppCompatActivity {
     private static final SimpleDateFormat SDF_BPM_TS =
             new SimpleDateFormat("dd/MM HH:mm", Locale.getDefault());
 
+    private static final SimpleDateFormat SDF_LOC_TS =
+            new SimpleDateFormat("dd/MM HH:mm", Locale.getDefault());
+
     // ── Views ──────────────────────────────────────────────────────────────────
     private TextView     tvPatientName;
     private TextView     tvAvatarInitials;
@@ -57,7 +60,12 @@ public class CaregiverActivity extends AppCompatActivity {
     private TextView     tvStatusMonitoramento;
     private View         vStatusDot;
     private View         btnCall;
+    private TextView     tvLocationValue;
     private LinearLayout llPacientesSecundarios;
+
+    // ── Última localização recebida ────────────────────────────────────────────
+    private Double lastLatitude  = null;
+    private Double lastLongitude = null;
 
     // ── Firebase ───────────────────────────────────────────────────────────────
     private FirebaseFirestore db;
@@ -109,6 +117,7 @@ public class CaregiverActivity extends AppCompatActivity {
         tvStatusMonitoramento  = findViewById(R.id.tv_status_monitoramento);
         vStatusDot             = findViewById(R.id.v_status_dot);
         btnCall                = findViewById(R.id.btn_call);
+        tvLocationValue        = findViewById(R.id.tv_location_value);
         llPacientesSecundarios = findViewById(R.id.ll_pacientes_secundarios);
 
         db          = FirebaseFirestore.getInstance();
@@ -126,6 +135,9 @@ public class CaregiverActivity extends AppCompatActivity {
         }
 
         if (btnCall != null) btnCall.setOnClickListener(v -> ligarParaPaciente());
+
+        View bottomMap = findViewById(R.id.bottom_map);
+        if (bottomMap != null) bottomMap.setOnClickListener(v -> abrirUltimaLocalizacaoNoMaps());
 
         ContextCompat.startForegroundService(this,
                 new Intent(this, CaregiverAlertService.class));
@@ -214,6 +226,9 @@ public class CaregiverActivity extends AppCompatActivity {
         atualizarStatusMonitoramento(null);
         telefonePaciente = null;
         if (btnCall != null) btnCall.setAlpha(0.4f);
+        lastLatitude  = null;
+        lastLongitude = null;
+        if (tvLocationValue != null) tvLocationValue.setText("Aguardando localização...");
         llPacientesSecundarios.removeAllViews();
         todosUids.clear();
         nomesPorUid.clear();
@@ -351,6 +366,11 @@ public class CaregiverActivity extends AppCompatActivity {
     private void ouvirPaciente(String uidPaciente) {
         if (pacienteListener != null) pacienteListener.remove();
 
+        // Limpa localização anterior ao trocar de paciente
+        lastLatitude  = null;
+        lastLongitude = null;
+        if (tvLocationValue != null) tvLocationValue.setText("Aguardando localização...");
+
         pacienteListener = db.collection("users").document(uidPaciente)
                 .addSnapshotListener((doc, e) -> {
                     if (e != null || doc == null || !doc.exists()) return;
@@ -398,6 +418,27 @@ public class CaregiverActivity extends AppCompatActivity {
 
                     String status = doc.getString(FirebaseHelper.Fields.STATUS_MONITORAMENTO);
                     atualizarStatusMonitoramento(status);
+
+                    // ── Última localização recebida ───────────────────────────
+                    Double lat = doc.getDouble(FirebaseHelper.Fields.LATITUDE);
+                    Double lng = doc.getDouble(FirebaseHelper.Fields.LONGITUDE);
+                    Date   locAt = doc.getDate(FirebaseHelper.Fields.LOCATION_TIMESTAMP);
+
+                    lastLatitude  = lat;
+                    lastLongitude = lng;
+
+                    if (tvLocationValue != null) {
+                        if (lat != null && lng != null) {
+                            String coords = String.format(Locale.getDefault(),
+                                    "%.5f, %.5f", lat, lng);
+                            String hora = locAt != null
+                                    ? "  •  " + SDF_LOC_TS.format(locAt)
+                                    : "";
+                            tvLocationValue.setText(coords + hora);
+                        } else {
+                            tvLocationValue.setText("Aguardando localização...");
+                        }
+                    }
                 });
     }
 
@@ -504,6 +545,36 @@ public class CaregiverActivity extends AppCompatActivity {
                         "Erro ao confirmar alerta", Toast.LENGTH_SHORT).show();
             }
         });
+    }
+
+    // ==================== Abrir última localização no Maps =====================
+
+    private void abrirUltimaLocalizacaoNoMaps() {
+        if (lastLatitude == null || lastLongitude == null) {
+            Toast.makeText(this,
+                    "Nenhuma localização disponível para este paciente",
+                    Toast.LENGTH_SHORT).show();
+            return;
+        }
+        String nome = (uidPacienteAtivo != null && nomesPorUid.containsKey(uidPacienteAtivo))
+                ? nomesPorUid.get(uidPacienteAtivo)
+                : "Paciente";
+        Uri uri = Uri.parse(String.format(Locale.US,
+                "geo:%f,%f?q=%f,%f(%s)",
+                lastLatitude, lastLongitude,
+                lastLatitude, lastLongitude,
+                Uri.encode(nome)));
+        Intent intent = new Intent(Intent.ACTION_VIEW, uri);
+        intent.setPackage("com.google.android.apps.maps");
+        if (intent.resolveActivity(getPackageManager()) != null) {
+            startActivity(intent);
+        } else {
+            // Fallback: abre no navegador caso o Maps não esteja instalado
+            Uri webUri = Uri.parse(String.format(Locale.US,
+                    "https://maps.google.com/?q=%f,%f",
+                    lastLatitude, lastLongitude));
+            startActivity(new Intent(Intent.ACTION_VIEW, webUri));
+        }
     }
 
     // ==================== Ligar para o paciente ================================
