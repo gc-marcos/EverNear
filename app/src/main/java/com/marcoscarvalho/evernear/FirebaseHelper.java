@@ -457,9 +457,27 @@ public class FirebaseHelper {
      * @param bpmMax       limite máximo configurado; -1 se desconhecido
      * @param callback     retorna o ID do documento criado; usado pela lógica de escalada
      */
+    /**
+     * Envia um alerta para o Firestore incluindo, opcionalmente, a localização atual do paciente.
+     *
+     * <p>Campos de localização gravados no documento quando {@code location != null}:</p>
+     * <ul>
+     *   <li>{@link Fields#LATITUDE} — latitude em graus decimais</li>
+     *   <li>{@link Fields#LONGITUDE} — longitude em graus decimais</li>
+     *   <li>{@link Fields#ACCURACY} — precisão em metros</li>
+     * </ul>
+     *
+     * <p>Tanto alertas cardíacos quanto de geofence devem incluir localização para
+     * permitir o acompanhamento em tempo real pelo cuidador.</p>
+     *
+     * @param location    localização atual do paciente; {@code null} se indisponível
+     *                    (o alerta é enviado mesmo assim, porém sem coordenadas)
+     * @param callback    retorna o ID do documento criado; usado pela lógica de escalada
+     */
     public static void enviarAlerta(String uidPaciente, String nomePaciente,
                                     String uidCuidador, int bpm, String tipo,
                                     int prioridade, int bpmMin, int bpmMax,
+                                    @Nullable Location location,
                                     Callback<String> callback) {
         Map<String, Object> alerta = new HashMap<>();
         alerta.put(Fields.PACIENTE_ID,   uidPaciente);
@@ -473,18 +491,40 @@ public class FirebaseHelper {
         // Limites desnormalizados: CaregiverAlertService exibe sem read extra
         if (bpmMin > 0) alerta.put(Fields.BPM_MIN, bpmMin);
         if (bpmMax > 0) alerta.put(Fields.BPM_MAX, bpmMax);
+        // Localização embarcada no alerta — permite acompanhamento sem read extra
+        if (location != null) {
+            alerta.put(Fields.LATITUDE,  location.getLatitude());
+            alerta.put(Fields.LONGITUDE, location.getLongitude());
+            alerta.put(Fields.ACCURACY,  location.getAccuracy());
+        }
 
         db.collection("alerts").add(alerta)
                 .addOnSuccessListener(docRef -> {
                     Log.d(TAG, "Alerta criado: id=" + docRef.getId()
                             + " tipo=" + tipo + " bpm=" + bpm
-                            + " cuidador=" + uidCuidador);
+                            + " cuidador=" + uidCuidador
+                            + (location != null
+                            ? " lat=" + location.getLatitude()
+                              + " lng=" + location.getLongitude()
+                            : " (sem localização)"));
                     if (callback != null) callback.onResult(docRef.getId());
                 })
                 .addOnFailureListener(e -> {
                     Log.e(TAG, "Falha ao criar alerta: " + e.getMessage());
                     if (callback != null) callback.onError(e);
                 });
+    }
+
+    /**
+     * Sobrecarga sem localização — compatibilidade com chamadores que não têm
+     * a localização disponível (emergência manual, escalada).
+     */
+    public static void enviarAlerta(String uidPaciente, String nomePaciente,
+                                    String uidCuidador, int bpm, String tipo,
+                                    int prioridade, int bpmMin, int bpmMax,
+                                    Callback<String> callback) {
+        enviarAlerta(uidPaciente, nomePaciente, uidCuidador, bpm, tipo,
+                prioridade, bpmMin, bpmMax, null, callback);
     }
 
     /**
@@ -495,7 +535,7 @@ public class FirebaseHelper {
                                     String uidCuidador, int bpm, String tipo,
                                     int prioridade, Callback<String> callback) {
         enviarAlerta(uidPaciente, nomePaciente, uidCuidador, bpm, tipo,
-                prioridade, -1, -1, callback);
+                prioridade, -1, -1, null, callback);
     }
 
     /** Sobrecarga para emergência manual: prioridade 0, sem limites de BPM. */
@@ -503,7 +543,7 @@ public class FirebaseHelper {
                                     String uidCuidador, int bpm, String tipo,
                                     Callback<String> callback) {
         enviarAlerta(uidPaciente, nomePaciente, uidCuidador, bpm, tipo,
-                0, -1, -1, callback);
+                0, -1, -1, null, callback);
     }
 
     /**

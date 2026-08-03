@@ -20,6 +20,8 @@ import android.os.PowerManager;
 import android.os.SystemClock;
 import android.util.Log;
 
+import android.location.Location;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
@@ -825,17 +827,32 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
         notifManager.notify(NOTIF_ID + 1,
                 buildAlertNotification(tituloLocal, nomePaciente + ": " + bpm + " bpm"));
 
-        // Obtém localização e salva no Firestore em paralelo com o alerta.
-        // Fire-and-forget: o alerta é enviado imediatamente sem aguardar o GPS.
-        if (uidPaciente != null) {
-            LocationHelper.obterESalvarLocalizacao(this, uidPaciente);
-        }
-
         if (cuidadoresVinculados.isEmpty()) {
             Log.w(TAG, "Anomalia sem cuidadores vinculados — somente alerta local");
             return;
         }
-        enviarAlertaParaCuidador(0, bpm, tipo.name());
+
+        // Obtém a localização do cache (zero-latência) e inclui no alerta cardíaco.
+        // Spec: "alerta cardíaco deve incluir obrigatoriamente a localização atual do paciente".
+        // Salva também no documento do paciente (para a tela de monitoramento do cuidador).
+        final String tipoStr = tipo.name();
+        LocationHelper.obterUltimaLocalizacaoRapida(this, new FirebaseHelper.Callback<Location>() {
+            @Override
+            public void onResult(Location loc) {
+                if (loc != null && uidPaciente != null) {
+                    FirebaseHelper.salvarLocalizacaoEmergencia(uidPaciente, loc, null);
+                } else if (uidPaciente != null) {
+                    // Fallback: tenta request completo para atualizar o doc do paciente
+                    LocationHelper.obterESalvarLocalizacao(HeartRateService.this, uidPaciente);
+                }
+                enviarAlertaParaCuidador(0, bpm, tipoStr, loc);
+            }
+            @Override
+            public void onError(Exception e) {
+                // Nunca deve ocorrer — onResult(null) é chamado em caso de falha
+                enviarAlertaParaCuidador(0, bpm, tipoStr, null);
+            }
+        });
     }
 
     @Override
@@ -917,24 +934,40 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
      * Trata saída da zona segura detectada pelo sistema de Geofence.
      *
      * Fluxo:
-     *  1. Obtém localização atual e salva no Firestore (fire-and-forget).
-     *  2. Dispara alerta "SAIDA_ZONA" para todos os cuidadores (mesma cadeia
-     *     de escalada usada para anomalias cardíacas).
+     *  1. Obtém localização do cache do FusedLocation (zero-latência).
+     *  2. Salva localização no doc do paciente (para a tela do cuidador).
+     *  3. Dispara alerta "SAIDA_ZONA" com localização embarcada para todos os
+     *     cuidadores (mesma cadeia de escalada usada para anomalias cardíacas).
+     *
+     * Spec: "Fora da Área Segura" é o tipo de alerta (SAIDA_ZONA = código interno;
+     * CaregiverActivity exibe "📍 Saída da área segura" para esse tipo).
+     * A localização é independente do BPM — o alerta é enviado mesmo com BPM normal.
      */
     private void tratarSaidaGeofence() {
         Log.w(TAG, "Saída da zona segura — obtendo localização e enviando alerta");
-
-        if (uidPaciente != null) {
-            LocationHelper.obterESalvarLocalizacao(this, uidPaciente);
-        }
 
         if (uidPaciente == null || cuidadoresVinculados.isEmpty()) {
             Log.w(TAG, "Saída da zona segura: dados do paciente ausentes — alerta omitido");
             return;
         }
 
-        // Passa bpm=0 pois não é relevante para alertas de geofence
-        enviarAlertaParaCuidador(0, 0, "SAIDA_ZONA");
+        LocationHelper.obterUltimaLocalizacaoRapida(this, new FirebaseHelper.Callback<Location>() {
+            @Override
+            public void onResult(Location loc) {
+                if (loc != null) {
+                    FirebaseHelper.salvarLocalizacaoEmergencia(uidPaciente, loc, null);
+                } else {
+                    // Fallback: request completo para atualizar doc do paciente
+                    LocationHelper.obterESalvarLocalizacao(HeartRateService.this, uidPaciente);
+                }
+                // bpm=0 pois frequência cardíaca não é relevante para alertas de geofence
+                enviarAlertaParaCuidador(0, 0, "SAIDA_ZONA", loc);
+            }
+            @Override
+            public void onError(Exception e) {
+                enviarAlertaParaCuidador(0, 0, "SAIDA_ZONA", null);
+            }
+        });
     }
 
     // ==================== Escalada de alertas ====================
@@ -946,7 +979,18 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
      * garantindo que o cuidador seguinte seja notificado após 5 min independentemente
      * do estado de energia do dispositivo.
      */
-    private void enviarAlertaParaCuidador(int indice, int bpm, String tipo) {
+    /**
+     * Envia alerta ao cuidador e agenda escalada via AlarmManager se houver próximo.
+     *
+     * <p>A localização é embarcada no documento do alerta quando disponível, permitindo
+     * ao cuidador ver onde o paciente estava no momento do evento sem read extra.
+     * Nas chamadas de escalada (re-notificação ao próximo cuidador) a localização é
+     * passada como {@code null} — o alerta original já continha as coordenadas.</p>
+     *
+     * @param location localização no momento do evento; {@code null} nas escaladas
+     */
+    private void enviarAlertaParaCuidador(int indice, int bpm, String tipo,
+                                          @Nullable Location location) {
         if (indice >= cuidadoresVinculados.size()) {
             Log.d(TAG, "Escalada encerrada (índice " + indice + " fora da lista)");
             return;
@@ -956,7 +1000,7 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
         String uidCuidador = cuidadoresVinculados.get(indice);
         if (uidCuidador == null || uidCuidador.isEmpty() || uidCuidador.equals(uidPaciente)) {
             Log.e(TAG, "UID inválido no índice " + indice + " — pulando");
-            enviarAlertaParaCuidador(indice + 1, bpm, tipo);
+            enviarAlertaParaCuidador(indice + 1, bpm, tipo, null);
             return;
         }
 
@@ -965,6 +1009,7 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
 
         FirebaseHelper.enviarAlerta(
                 uidPaciente, nomePaciente, uidCuidador, bpm, tipo, indice, bpmMin, bpmMax,
+                location,
                 new FirebaseHelper.Callback<String>() {
                     @Override
                     public void onResult(String alertaId) {
@@ -976,7 +1021,7 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
                     @Override
                     public void onError(Exception e) {
                         Log.e(TAG, "Falha ao enviar alerta[" + indice + "]: " + e.getMessage());
-                        enviarAlertaParaCuidador(indice + 1, bpm, tipo);
+                        enviarAlertaParaCuidador(indice + 1, bpm, tipo, null);
                     }
                 });
     }
@@ -1012,13 +1057,14 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
                     Log.d(TAG, "Alerta " + alertaId + " confirmado — escalada cancelada");
                 } else {
                     Log.d(TAG, "Alerta " + alertaId + " não confirmado → escalando");
-                    enviarAlertaParaCuidador(proximoIndice, bpm, tipo);
+                    // Escalada não inclui nova localização — o alerta original já a continha
+                    enviarAlertaParaCuidador(proximoIndice, bpm, tipo, null);
                 }
             }
             @Override
             public void onError(Exception e) {
                 Log.w(TAG, "Erro ao verificar confirmação — escalando por precaução");
-                enviarAlertaParaCuidador(proximoIndice, bpm, tipo);
+                enviarAlertaParaCuidador(proximoIndice, bpm, tipo, null);
             }
         });
     }

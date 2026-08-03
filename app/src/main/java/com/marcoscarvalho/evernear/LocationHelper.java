@@ -97,6 +97,56 @@ public final class LocationHelper {
                 || lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER);
     }
 
+    // ==================== Localização via callback (para incluir no alerta) ====================
+
+    /**
+     * Obtém a última localização conhecida e entrega via callback.
+     *
+     * Usa apenas o cache do FusedLocationProviderClient (getLastLocation).
+     * Não dispara um novo request de GPS — é zero-latência quando o HeartRateService
+     * já está monitorando ativamente (o cache é atualizado pelo LocationCallback contínuo).
+     *
+     * O callback recebe {@code null} quando:
+     *  - Permissão de localização negada
+     *  - Cache vazio (dispositivo nunca obteve um fix desde o boot)
+     *  - Falha interna do FusedLocation
+     *
+     * Em todos esses casos o alerta é enviado mesmo assim, porém sem coordenadas.
+     *
+     * @param context  contexto Android (preferencialmente o serviço ou activity)
+     * @param callback recebe o objeto {@link Location} ou null
+     */
+    public static void obterUltimaLocalizacaoRapida(Context context,
+                                                    FirebaseHelper.Callback<Location> callback) {
+        if (callback == null) return;
+        if (!temPermissao(context)) {
+            Log.w(TAG, "obterUltimaLocalizacaoRapida: ACCESS_FINE_LOCATION negada");
+            callback.onResult(null);
+            return;
+        }
+        try {
+            LocationServices.getFusedLocationProviderClient(context)
+                    .getLastLocation()
+                    .addOnSuccessListener(loc -> {
+                        if (loc != null) {
+                            Log.d(TAG, "Localização rápida (cache): "
+                                    + loc.getLatitude() + ", " + loc.getLongitude()
+                                    + " ±" + loc.getAccuracy() + " m");
+                        } else {
+                            Log.d(TAG, "Cache de localização vazio — alerta enviado sem coordenadas");
+                        }
+                        callback.onResult(loc); // null é tratado pelo chamador
+                    })
+                    .addOnFailureListener(e -> {
+                        Log.w(TAG, "getLastLocation() falhou: " + e.getMessage());
+                        callback.onResult(null);
+                    });
+        } catch (SecurityException e) {
+            Log.e(TAG, "SecurityException em obterUltimaLocalizacaoRapida: " + e.getMessage());
+            callback.onResult(null);
+        }
+    }
+
     // ==================== Localização única (emergência) ====================
 
     /**

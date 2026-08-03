@@ -213,14 +213,7 @@ public class ConfigurarPontoReferenciaActivity extends AppCompatActivity
         googleMap.getUiSettings().setCompassEnabled(true);
         googleMap.getUiSettings().setMyLocationButtonEnabled(false); // usamos botão próprio
 
-        // Tema escuro — tenta aplicar estilo. Falha silenciosa se o arquivo não existir.
-        try {
-            googleMap.setMapStyle(
-                    com.google.android.gms.maps.model.MapStyleOptions.loadRawResourceStyle(
-                            this, R.raw.map_style_dark));
-        } catch (Exception ignored) {
-            // Estilo escuro opcional — não crítico para o funcionamento
-        }
+        // Mapa usa o tema padrão (light) do Google Maps — sem estilos personalizados.
 
         // Permissão de localização para o botão "Minha localização"
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)

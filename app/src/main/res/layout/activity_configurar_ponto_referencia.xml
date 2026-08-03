@@ -62,7 +62,12 @@
     </LinearLayout>
 
     <!-- ── Mapa (ocupa a maior parte da tela) ───────────────────────────── -->
-    <fragment
+    <!--
+        FragmentContainerView em vez de <fragment> para evitar o crash
+        "onInflate requires a Context which implements HostCallbacks" no
+        LinearLayout com layout_weight em Android 11+.
+    -->
+    <androidx.fragment.app.FragmentContainerView
         android:id="@+id/map_fragment"
         android:name="com.google.android.gms.maps.SupportMapFragment"
         android:layout_width="match_parent"
