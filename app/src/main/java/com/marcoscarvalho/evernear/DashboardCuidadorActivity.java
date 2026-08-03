@@ -1,5 +1,6 @@
 package com.marcoscarvalho.evernear;
 
+import android.content.Intent;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.view.Gravity;
@@ -10,6 +11,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.cardview.widget.CardView;
 
@@ -144,8 +146,9 @@ public class DashboardCuidadorActivity extends AppCompatActivity {
         if (uids.equals(ultimosUids)) return;
         ultimosUids = new ArrayList<>(uids);
 
-        int           total    = uids.size();
-        String[]      textos   = new String[total];
+        int           total     = uids.size();
+        String[]      textos    = new String[total];
+        String[]      nomes     = new String[total];  // nome de exibição sem rótulo de prioridade
         AtomicInteger pendentes = new AtomicInteger(total);
 
         for (int i = 0; i < total; i++) {
@@ -156,10 +159,12 @@ public class DashboardCuidadorActivity extends AppCompatActivity {
                     .addOnSuccessListener(doc -> {
                         if (!doc.exists()) {
                             textos[idx] = "Paciente (não encontrado)";
+                            nomes[idx]  = "Paciente";
                         } else {
                             String nomePac    = doc.getString(FirebaseHelper.Fields.NOME);
                             String apelidoPac = doc.getString(FirebaseHelper.Fields.APELIDO);
                             String exibir     = FirebaseHelper.nomeExibir(apelidoPac, nomePac, "Paciente");
+                            nomes[idx]        = exibir;
 
                             // Prioridade: posição deste cuidador na lista do paciente
                             @SuppressWarnings("unchecked")
@@ -169,24 +174,38 @@ public class DashboardCuidadorActivity extends AppCompatActivity {
                             String labelPrio = pos >= 0 ? " · Prioridade " + (pos + 1) : "";
                             textos[idx] = exibir + labelPrio;
                         }
-                        if (pendentes.decrementAndGet() == 0) construirCards(textos);
+                        if (pendentes.decrementAndGet() == 0) {
+                            construirCards(textos, uids.toArray(new String[0]), nomes);
+                        }
                     })
-                    .addOnFailureListener(ex ->  {
+                    .addOnFailureListener(ex -> {
                         textos[idx] = "Paciente (erro ao carregar)";
-                        if (pendentes.decrementAndGet() == 0) construirCards(textos);
+                        nomes[idx]  = "Paciente";
+                        if (pendentes.decrementAndGet() == 0) {
+                            construirCards(textos, uids.toArray(new String[0]), nomes);
+                        }
                     });
         }
     }
 
     /** Constrói os cards na ordem correta após todos os reads assíncronos concluírem. */
-    private void construirCards(String[] textos) {
+    private void construirCards(String[] textos, String[] uids, String[] nomes) {
         llListaPacientes.removeAllViews();
-        for (String texto : textos) {
-            adicionarCardPaciente(texto);
+        for (int i = 0; i < textos.length; i++) {
+            adicionarCardPaciente(textos[i], uids[i], nomes[i]);
         }
     }
 
-    private void adicionarCardPaciente(String nomeExibir) {
+    /**
+     * Cria o card de um paciente na lista.
+     *
+     * Toque curto → opções rápidas: "Ver no mapa" ou "Configurar zona segura".
+     *
+     * @param nomeExibir  texto formatado (nome + rótulo de prioridade)
+     * @param uidPaciente UID do paciente para ações na tela de zona segura
+     * @param nomePaciente nome de exibição limpo para a tela de configuração
+     */
+    private void adicionarCardPaciente(String nomeExibir, String uidPaciente, String nomePaciente) {
         CardView card = new CardView(this);
         LinearLayout.LayoutParams cardParams = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -210,11 +229,41 @@ public class DashboardCuidadorActivity extends AppCompatActivity {
         tvNome.setText(nomeExibir);
         tvNome.setTextColor(Color.WHITE);
         tvNome.setTextSize(16f);
+        tvNome.setLayoutParams(new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+        // Ícone de engrenagem para indicar que é clicável
+        TextView tvConfig = new TextView(this);
+        tvConfig.setText("⚙");
+        tvConfig.setTextColor(Color.parseColor("#58A6FF"));
+        tvConfig.setTextSize(18f);
 
         inner.addView(tvDot);
         inner.addView(tvNome);
+        inner.addView(tvConfig);
         card.addView(inner);
         llListaPacientes.addView(card);
+
+        // Toque → opções de ação para este paciente
+        card.setOnClickListener(v -> mostrarOpcoesCardPaciente(uidPaciente, nomePaciente));
+    }
+
+    /**
+     * Exibe um diálogo de opções ao tocar em um card de paciente.
+     * Permite configurar a zona segura diretamente a partir da lista.
+     */
+    private void mostrarOpcoesCardPaciente(String uidPaciente, String nomePaciente) {
+        String[] opcoes = {"🗺️  Configurar zona segura"};
+        new AlertDialog.Builder(this)
+                .setTitle(nomePaciente)
+                .setItems(opcoes, (dialog, which) -> {
+                    if (which == 0) {
+                        ConfigurarPontoReferenciaActivity.abrir(
+                                DashboardCuidadorActivity.this, uidPaciente, nomePaciente);
+                    }
+                })
+                .setNegativeButton("Fechar", null)
+                .show();
     }
 
     // ==================== Vincular paciente ====================
@@ -245,7 +294,11 @@ public class DashboardCuidadorActivity extends AppCompatActivity {
                                     Toast.LENGTH_LONG).show();
                             return;
                         }
-                        vincular(pacienteDoc.getId());
+                        // Extrai o nome de exibição para usar após a vinculação
+                        String nomePac    = pacienteDoc.getString(FirebaseHelper.Fields.NOME);
+                        String apelidoPac = pacienteDoc.getString(FirebaseHelper.Fields.APELIDO);
+                        String nomeExibir = FirebaseHelper.nomeExibir(apelidoPac, nomePac, "Paciente");
+                        vincular(pacienteDoc.getId(), nomeExibir);
                     }
 
                     @Override
@@ -257,14 +310,30 @@ public class DashboardCuidadorActivity extends AppCompatActivity {
                 });
     }
 
-    private void vincular(String uidPaciente) {
+    /**
+     * Executa a vinculação e, em caso de sucesso, oferece ao cuidador a opção de
+     * configurar imediatamente a zona segura para o paciente recém-vinculado.
+     */
+    private void vincular(String uidPaciente, String nomePaciente) {
         FirebaseHelper.vincularPacienteCuidador(uidCuidador, uidPaciente,
                 new FirebaseHelper.Callback<Void>() {
                     @Override
                     public void onResult(Void result) {
-                        Toast.makeText(DashboardCuidadorActivity.this,
-                                "Paciente vinculado com sucesso!", Toast.LENGTH_SHORT).show();
                         etCodigo.setText("");
+
+                        // Oferece configuração imediata da zona segura
+                        new AlertDialog.Builder(DashboardCuidadorActivity.this)
+                                .setTitle("✅ Paciente vinculado!")
+                                .setMessage("Deseja configurar agora a zona segura para "
+                                        + nomePaciente + "?\n\n"
+                                        + "A zona segura envia um alerta automático se o "
+                                        + "paciente sair da área definida.")
+                                .setPositiveButton("Configurar zona segura", (d, w) ->
+                                        ConfigurarPontoReferenciaActivity.abrir(
+                                                DashboardCuidadorActivity.this,
+                                                uidPaciente, nomePaciente))
+                                .setNegativeButton("Agora não", null)
+                                .show();
                     }
 
                     @Override

@@ -92,6 +92,16 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.AppCompat.DayNight.NoActionBar">
 
+        <!--
+            Chave da API do Google Maps.
+            Substitua o valor abaixo pela sua chave obtida em:
+            https://console.cloud.google.com → APIs e Serviços → Credenciais
+            Habilite: "Maps SDK for Android" no seu projeto do Google Cloud.
+        -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="SUA_CHAVE_MAPS_AQUI" />
+
         <!-- Tela inicial: seleção de papel (paciente/cuidador) -->
         <activity
             android:name=".MainActivity"
@@ -200,6 +210,12 @@
             </intent-filter>
         </service>
 
+        <!-- Tela de configuração de zona segura (CUIDADOR — celular/tablet) -->
+        <activity
+            android:name=".ConfigurarPontoReferenciaActivity"
+            android:exported="false"
+            android:theme="@style/Theme.AppCompat.DayNight.NoActionBar" />
+
         <!--
             Receptor de boot — reinicia o serviço correto quando o dispositivo é ligado.
             directBootAware="false": aguarda o desencriptamento do armazenamento (padrão seguro).
@@ -215,6 +231,19 @@
                 <action android:name="com.sec.android.intent.action.LAUNCH_DATA_SETTINGS" />
             </intent-filter>
         </receiver>
+
+        <!--
+            Receptor de eventos de Geofence (PACIENTE — smartwatch).
+            Recebe a transição GEOFENCE_TRANSITION_EXIT da API de Geofencing do Android
+            e inicia o HeartRateService com ACTION_GEOFENCE_EXIT para criar o alerta.
+
+            exported="true": obrigatório para que o sistema Android (processo separado)
+            entregue o PendingIntent de geofence — sem isso a transição é silenciada.
+            O receiver valida que o Intent vem do sistema de Geofence (GeofencingEvent).
+        -->
+        <receiver
+            android:name=".GeofenceReceiver"
+            android:exported="true" />
 
     </application>
 

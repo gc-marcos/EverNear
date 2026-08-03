@@ -1,0 +1,244 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#0D1117">
+
+    <!-- ── Cabeçalho ────────────────────────────────────────────────────── -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingStart="8dp"
+        android:paddingEnd="16dp"
+        android:background="#161B22">
+
+        <Button
+            android:id="@+id/btn_voltar"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:text="←"
+            android:textSize="20sp"
+            android:textColor="#FFFFFF"
+            android:backgroundTint="@android:color/transparent"
+            android:padding="0dp" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:layout_marginStart="4dp">
+
+            <TextView
+                android:id="@+id/tv_titulo"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Zona Segura"
+                android:textColor="#FFFFFF"
+                android:textSize="17sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tv_subtitulo"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Configurar ponto de referência"
+                android:textColor="#9AA4B2"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <!-- Indicador de zona ativa -->
+        <TextView
+            android:id="@+id/tv_zona_ativa"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="● Ativa"
+            android:textColor="#4CAF50"
+            android:textSize="12sp"
+            android:visibility="gone" />
+    </LinearLayout>
+
+    <!-- ── Mapa (ocupa a maior parte da tela) ───────────────────────────── -->
+    <fragment
+        android:id="@+id/map_fragment"
+        android:name="com.google.android.gms.maps.SupportMapFragment"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+    <!-- ── Controles inferiores ─────────────────────────────────────────── -->
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="#161B22">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <!-- Busca de endereço -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="BUSCAR ENDEREÇO"
+                android:textColor="#9AA4B2"
+                android:textSize="11sp"
+                android:letterSpacing="0.08" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginTop="6dp">
+
+                <EditText
+                    android:id="@+id/et_endereco"
+                    android:layout_width="0dp"
+                    android:layout_height="44dp"
+                    android:layout_weight="1"
+                    android:background="#0D1117"
+                    android:hint="Ex: Rua das Flores, 123 — São Paulo"
+                    android:textColor="#FFFFFF"
+                    android:textColorHint="#9AA4B2"
+                    android:padding="10dp"
+                    android:imeOptions="actionSearch"
+                    android:inputType="text"
+                    android:maxLines="1" />
+
+                <Button
+                    android:id="@+id/btn_buscar"
+                    android:layout_width="80dp"
+                    android:layout_height="44dp"
+                    android:text="Buscar"
+                    android:textSize="12sp"
+                    android:backgroundTint="#1F6FEB"
+                    android:textColor="#FFFFFF"
+                    android:layout_marginStart="8dp" />
+            </LinearLayout>
+
+            <Button
+                android:id="@+id/btn_minha_localizacao"
+                android:layout_width="match_parent"
+                android:layout_height="36dp"
+                android:text="📍  Usar minha localização atual"
+                android:backgroundTint="#0D1117"
+                android:textColor="#58A6FF"
+                android:textSize="13sp"
+                android:gravity="start|center_vertical"
+                android:paddingStart="4dp"
+                android:layout_marginTop="4dp" />
+
+            <!-- Divisor -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="#21262D"
+                android:layout_marginTop="10dp"
+                android:layout_marginBottom="12dp" />
+
+            <!-- Seleção de raio -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="RAIO DE SEGURANÇA"
+                android:textColor="#9AA4B2"
+                android:textSize="11sp"
+                android:letterSpacing="0.08" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginTop="8dp">
+
+                <Button
+                    android:id="@+id/btn_raio_100"
+                    android:layout_width="0dp"
+                    android:layout_height="36dp"
+                    android:layout_weight="1"
+                    android:text="100 m"
+                    android:textSize="12sp"
+                    android:textColor="#FFFFFF"
+                    android:backgroundTint="#21262D"
+                    android:layout_marginEnd="4dp" />
+
+                <Button
+                    android:id="@+id/btn_raio_300"
+                    android:layout_width="0dp"
+                    android:layout_height="36dp"
+                    android:layout_weight="1"
+                    android:text="300 m"
+                    android:textSize="12sp"
+                    android:textColor="#FFFFFF"
+                    android:backgroundTint="#21262D"
+                    android:layout_marginEnd="4dp" />
+
+                <Button
+                    android:id="@+id/btn_raio_500"
+                    android:layout_width="0dp"
+                    android:layout_height="36dp"
+                    android:layout_weight="1"
+                    android:text="500 m"
+                    android:textSize="12sp"
+                    android:textColor="#FFFFFF"
+                    android:backgroundTint="#21262D"
+                    android:layout_marginEnd="4dp" />
+
+                <Button
+                    android:id="@+id/btn_raio_1000"
+                    android:layout_width="0dp"
+                    android:layout_height="36dp"
+                    android:layout_weight="1"
+                    android:text="1 km"
+                    android:textSize="12sp"
+                    android:textColor="#FFFFFF"
+                    android:backgroundTint="#21262D" />
+            </LinearLayout>
+
+            <!-- Info do local selecionado -->
+            <TextView
+                android:id="@+id/tv_local_selecionado"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Toque no mapa ou busque um endereço para definir o ponto de referência"
+                android:textColor="#9AA4B2"
+                android:textSize="12sp"
+                android:layout_marginTop="12dp"
+                android:background="#0D1117"
+                android:padding="10dp" />
+
+            <!-- Botão Salvar -->
+            <Button
+                android:id="@+id/btn_salvar"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:text="Salvar zona segura"
+                android:backgroundTint="#1F6FEB"
+                android:textColor="#FFFFFF"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:layout_marginTop="12dp"
+                android:enabled="false"
+                android:alpha="0.5" />
+
+            <!-- Botão Remover (visível apenas quando já existe zona configurada) -->
+            <Button
+                android:id="@+id/btn_remover"
+                android:layout_width="match_parent"
+                android:layout_height="40dp"
+                android:text="Remover zona segura"
+                android:backgroundTint="@android:color/transparent"
+                android:textColor="#FF5252"
+                android:textSize="13sp"
+                android:layout_marginTop="4dp"
+                android:visibility="gone" />
+
+        </LinearLayout>
+    </ScrollView>
+
+</LinearLayout>

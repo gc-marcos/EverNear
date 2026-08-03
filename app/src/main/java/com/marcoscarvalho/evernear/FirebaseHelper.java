@@ -629,6 +629,88 @@ public class FirebaseHelper {
                         Log.w(TAG, "Falha ao obter token FCM para sincronização: " + e.getMessage()));
     }
 
+    // ==================== Zona segura ====================
+
+    /**
+     * Salva (ou atualiza) a zona segura do paciente no Firestore.
+     *
+     * Campos escritos em {@code users/{uidPaciente}}:
+     *   safeZoneLatitude  — latitude do ponto de referência
+     *   safeZoneLongitude — longitude do ponto de referência
+     *   safeZoneRadius    — raio em metros
+     *
+     * Após a escrita, o HeartRateService do paciente detecta a mudança via
+     * SnapshotListener e registra automaticamente o Geofence no Android OS
+     * ({@link LocationHelper#registrarGeofence}).
+     *
+     * @param uidPaciente UID do paciente no Firestore
+     * @param latitude    latitude do centro da zona segura
+     * @param longitude   longitude do centro da zona segura
+     * @param raioMetros  raio da zona em metros (mínimo recomendado: 100 m)
+     * @param callback    onResult(null) em sucesso; onError(e) em falha
+     */
+    public static void salvarZonaSegura(String uidPaciente,
+                                        double latitude, double longitude,
+                                        float raioMetros,
+                                        @Nullable Callback<Void> callback) {
+        if (uidPaciente == null || uidPaciente.isEmpty()) {
+            if (callback != null) callback.onError(new IllegalArgumentException("UID do paciente inválido"));
+            return;
+        }
+
+        Map<String, Object> dados = new HashMap<>();
+        dados.put(Fields.SAFE_ZONE_LATITUDE,  latitude);
+        dados.put(Fields.SAFE_ZONE_LONGITUDE, longitude);
+        dados.put(Fields.SAFE_ZONE_RADIUS,    (double) raioMetros);
+
+        db.collection("users").document(uidPaciente)
+                .update(dados)
+                .addOnSuccessListener(v -> {
+                    Log.i(TAG, "Zona segura salva: paciente=" + uidPaciente
+                            + " lat=" + latitude + " lng=" + longitude
+                            + " raio=" + raioMetros + " m");
+                    if (callback != null) callback.onResult(null);
+                })
+                .addOnFailureListener(e -> {
+                    Log.e(TAG, "Falha ao salvar zona segura: " + e.getMessage());
+                    if (callback != null) callback.onError(e);
+                });
+    }
+
+    /**
+     * Remove a zona segura do paciente do Firestore.
+     *
+     * Apaga os três campos da zona segura. O HeartRateService detecta a ausência
+     * dos campos via SnapshotListener e chama {@link LocationHelper#removerGeofence},
+     * desativando o monitoramento de saída de zona automaticamente.
+     *
+     * @param uidPaciente UID do paciente no Firestore
+     * @param callback    onResult(null) em sucesso; onError(e) em falha
+     */
+    public static void removerZonaSegura(String uidPaciente,
+                                         @Nullable Callback<Void> callback) {
+        if (uidPaciente == null || uidPaciente.isEmpty()) {
+            if (callback != null) callback.onError(new IllegalArgumentException("UID do paciente inválido"));
+            return;
+        }
+
+        Map<String, Object> dados = new HashMap<>();
+        dados.put(Fields.SAFE_ZONE_LATITUDE,  FieldValue.delete());
+        dados.put(Fields.SAFE_ZONE_LONGITUDE, FieldValue.delete());
+        dados.put(Fields.SAFE_ZONE_RADIUS,    FieldValue.delete());
+
+        db.collection("users").document(uidPaciente)
+                .update(dados)
+                .addOnSuccessListener(v -> {
+                    Log.i(TAG, "Zona segura removida: paciente=" + uidPaciente);
+                    if (callback != null) callback.onResult(null);
+                })
+                .addOnFailureListener(e -> {
+                    Log.e(TAG, "Falha ao remover zona segura: " + e.getMessage());
+                    if (callback != null) callback.onError(e);
+                });
+    }
+
     /**
      * Grava o campo "solicitarWakeUp" no documento do paciente para acionar
      * a Cloud Function que enviará o FCM de wake-up ao relógio.
