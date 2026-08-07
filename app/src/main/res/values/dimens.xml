@@ -41,4 +41,30 @@
     <dimen name="login_footer_margin_top">16dp</dimen>
     <dimen name="login_footer_padding">20dp</dimen>
     <dimen name="login_footer_text_size">14sp</dimen>
+
+    <!-- Tela inicial / seleção de perfil -->
+    <dimen name="main_screen_padding">18dp</dimen>
+    <dimen name="main_content_margin_horizontal">0dp</dimen>
+    <dimen name="main_logo_height">83dp</dimen>
+    <dimen name="main_title_margin_top">28dp</dimen>
+    <dimen name="main_title_text_size">27sp</dimen>
+    <dimen name="main_subtitle_margin_top">8dp</dimen>
+    <dimen name="main_subtitle_text_size">14sp</dimen>
+    <dimen name="main_prompt_top_margin">128dp</dimen>
+    <dimen name="main_prompt_bottom_margin">18dp</dimen>
+    <dimen name="main_prompt_text_size">14sp</dimen>
+    <dimen name="main_card_gap">12dp</dimen>
+    <dimen name="main_card_height">90dp</dimen>
+    <dimen name="main_card_radius">15dp</dimen>
+    <dimen name="main_card_padding_horizontal">16dp</dimen>
+    <dimen name="main_icon_container_size">52dp</dimen>
+    <dimen name="main_icon_padding">10dp</dimen>
+    <dimen name="main_card_text_gap">16dp</dimen>
+    <dimen name="main_card_description_top_margin">2dp</dimen>
+    <dimen name="main_card_title_text_size">16sp</dimen>
+    <dimen name="main_card_description_text_size">12sp</dimen>
+    <dimen name="main_arrow_size">24dp</dimen>
+    <dimen name="main_footer_bottom_margin">8dp</dimen>
+    <dimen name="main_footer_icon_gap">6dp</dimen>
+    <dimen name="main_footer_text_size">11sp</dimen>
 </resources>

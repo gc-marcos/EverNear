@@ -13,4 +13,19 @@
     <color name="caregiver_text_primary">#FFFFFF</color>
     <color name="caregiver_text_secondary">#A4B0D6</color>
     <color name="caregiver_alert_red">#FF4D6D</color>
+
+    <!-- Tela inicial / seleção de perfil -->
+    <color name="main_bg">#0F172A</color>
+    <color name="main_card_bg">#111C31</color>
+    <color name="main_text_primary">#F4F7FC</color>
+    <color name="main_text_secondary">#9AA7BB</color>
+    <color name="main_text_muted">#738097</color>
+    <color name="main_footer_text">#718098</color>
+    <color name="main_patient_stroke">#71304D</color>
+    <color name="main_caregiver_stroke">#1C5659</color>
+    <color name="main_patient_icon_bg">#3A263B</color>
+    <color name="main_caregiver_icon_bg">#123A3E</color>
+    <color name="main_patient_icon">#F04455</color>
+    <color name="main_caregiver_icon">#24D36B</color>
+    <color name="main_arrow">#718098</color>
 </resources>
