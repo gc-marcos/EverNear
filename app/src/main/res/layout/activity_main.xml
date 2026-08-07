@@ -14,6 +14,7 @@
         android:id="@+id/img_logo_ever_near"
         android:layout_width="0dp"
         android:layout_height="@dimen/main_logo_height"
+        android:layout_marginTop="@dimen/main_logo_top_margin"
         android:layout_marginStart="@dimen/main_content_margin_horizontal"
         android:layout_marginEnd="@dimen/main_content_margin_horizontal"
         android:contentDescription="@string/logo_ever_near_description"
@@ -78,21 +79,19 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/main_role_prompt"
-        app:layout_constraintBottom_toTopOf="@id/main_caregiver_card"
-        app:layout_constraintVertical_bias="0"
         android:layout_marginTop="@dimen/main_prompt_bottom_margin">
 
-        <ImageButton
-            android:id="@+id/btn_patient"
+        <ImageView
+            android:id="@+id/main_patient_icon_view"
             android:layout_width="@dimen/main_icon_container_size"
             android:layout_height="@dimen/main_icon_container_size"
             android:background="@drawable/bg_main_patient_icon"
-            android:contentDescription="@string/button_patient_description"
             android:padding="@dimen/main_icon_padding"
             android:scaleType="centerInside"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent"
+            android:contentDescription="@null"
             app:srcCompat="@drawable/ic_main_patient" />
 
         <TextView
@@ -106,8 +105,8 @@
             android:textSize="@dimen/main_card_title_text_size"
             android:textStyle="bold"
             app:layout_constraintEnd_toStartOf="@id/main_patient_arrow"
-            app:layout_constraintStart_toEndOf="@id/btn_patient"
-            app:layout_constraintTop_toTopOf="@id/btn_patient" />
+            app:layout_constraintStart_toEndOf="@id/main_patient_icon_view"
+            app:layout_constraintTop_toTopOf="@id/main_patient_icon_view" />
 
         <TextView
             android:id="@+id/main_patient_description"
@@ -121,7 +120,7 @@
             android:textColor="@color/main_text_muted"
             android:textSize="@dimen/main_card_description_text_size"
             app:layout_constraintEnd_toStartOf="@id/main_patient_arrow"
-            app:layout_constraintStart_toEndOf="@id/btn_patient"
+            app:layout_constraintStart_toEndOf="@id/main_patient_icon_view"
             app:layout_constraintTop_toBottomOf="@id/main_patient_title" />
 
         <ImageView
@@ -132,6 +131,23 @@
             android:src="@drawable/ic_main_arrow"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <!--
+            O Java mantém o listener em btn_patient. O botão ocupa todo o card,
+            garantindo que o toque funcione no ícone, texto, seta ou espaço vazio.
+        -->
+        <ImageButton
+            android:id="@+id/btn_patient"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:background="@android:color/transparent"
+            android:contentDescription="@string/button_patient_description"
+            android:clickable="true"
+            android:focusable="true"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
     </androidx.constraintlayout.widget.ConstraintLayout>
 
@@ -144,23 +160,22 @@
         android:layout_marginEnd="@dimen/main_content_margin_horizontal"
         android:paddingStart="@dimen/main_card_padding_horizontal"
         android:paddingEnd="@dimen/main_card_padding_horizontal"
-        app:layout_constraintBottom_toTopOf="@id/main_footer"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/main_patient_card"
         android:layout_marginTop="@dimen/main_card_gap">
 
-        <ImageButton
-            android:id="@+id/btn_caregiver"
+        <ImageView
+            android:id="@+id/main_caregiver_icon_view"
             android:layout_width="@dimen/main_icon_container_size"
             android:layout_height="@dimen/main_icon_container_size"
             android:background="@drawable/bg_main_caregiver_icon"
-            android:contentDescription="@string/button_caregiver_description"
             android:padding="@dimen/main_icon_padding"
             android:scaleType="centerInside"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent"
+            android:contentDescription="@null"
             app:srcCompat="@drawable/ic_main_caregiver" />
 
         <TextView
@@ -174,8 +189,8 @@
             android:textSize="@dimen/main_card_title_text_size"
             android:textStyle="bold"
             app:layout_constraintEnd_toStartOf="@id/main_caregiver_arrow"
-            app:layout_constraintStart_toEndOf="@id/btn_caregiver"
-            app:layout_constraintTop_toTopOf="@id/btn_caregiver" />
+            app:layout_constraintStart_toEndOf="@id/main_caregiver_icon_view"
+            app:layout_constraintTop_toTopOf="@id/main_caregiver_icon_view" />
 
         <TextView
             android:id="@+id/main_caregiver_description"
@@ -189,7 +204,7 @@
             android:textColor="@color/main_text_muted"
             android:textSize="@dimen/main_card_description_text_size"
             app:layout_constraintEnd_toStartOf="@id/main_caregiver_arrow"
-            app:layout_constraintStart_toEndOf="@id/btn_caregiver"
+            app:layout_constraintStart_toEndOf="@id/main_caregiver_icon_view"
             app:layout_constraintTop_toBottomOf="@id/main_caregiver_title" />
 
         <ImageView
@@ -200,6 +215,20 @@
             android:src="@drawable/ic_main_arrow"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <!-- Área clicável integral do card, preservando o listener existente. -->
+        <ImageButton
+            android:id="@+id/btn_caregiver"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:background="@android:color/transparent"
+            android:contentDescription="@string/button_caregiver_description"
+            android:clickable="true"
+            android:focusable="true"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
     </androidx.constraintlayout.widget.ConstraintLayout>
 

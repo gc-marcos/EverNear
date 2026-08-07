@@ -1,0 +1,82 @@
+Claro. Como a **img1 é o estado atual** e a **img2 é o layout correto**, o prompt deve deixar explícito que é para **corrigir o visual sem alterar a lógica**, além de recuperar o funcionamento dos botões.
+
+### Prompt
+
+> Analise o layout atual da tela inicial do EverNear e compare com a imagem de referência fornecida.
+>
+> **Objetivo:** corrigir as últimas alterações realizadas na tela, mantendo **100% das funcionalidades e da lógica existente**, mas restaurando o layout para ficar visualmente igual à **imagem 2 (referência)**.
+>
+> ### 1. Corrigir o funcionamento dos botões
+>
+> * Os botões **“Paciente”** e **“Cuidador”** devem voltar a responder normalmente ao toque.
+> * Restaurar os `onClick`, `setOnClickListener`, navegação ou qualquer evento que existia anteriormente.
+> * O toque deve funcionar em **toda a área do card**, não apenas no ícone ou no texto.
+> * Não remover nem modificar a lógica de navegação já existente.
+> * Verificar se algum `View` ou elemento visual está sobrepondo os cards e impedindo o recebimento do toque.
+> * Garantir que os cards tenham `clickable`/`focusable` corretamente configurados quando aplicável.
+>
+> ### 2. Restaurar exatamente o tamanho e proporções da imagem 2
+>
+> A **imagem 2 é a referência visual principal**.
+>
+> Ajuste:
+>
+> * largura e altura dos cards;
+> * espaçamento entre os elementos;
+> * margens laterais;
+> * posição vertical dos elementos;
+> * tamanho do logo;
+> * tamanho dos textos;
+> * espaçamento entre logo, título, subtítulo e pergunta;
+> * posição dos cards “Paciente” e “Cuidador”;
+> * tamanho e posição dos ícones;
+> * tamanho das setas;
+> * posição do texto inferior “Tecnologia com impacto social · Dados protegidos”.
+>
+> A tela deve ocupar e distribuir o espaço **como mostrado na imagem 2**, e não como está atualmente na imagem 1.
+>
+> ### 3. Não alterar funcionalidades
+>
+> **NÃO modificar:**
+>
+> * regras de negócio;
+> * Firebase;
+> * autenticação;
+> * navegação existente;
+> * Activities;
+> * Services;
+> * permissões;
+> * armazenamento;
+> * lógica de paciente;
+> * lógica de cuidador;
+> * qualquer funcionalidade relacionada ao EverNear.
+>
+> Faça somente as alterações necessárias no **layout/apresentação e nos eventos dos dois botões**, caso estes tenham sido quebrados pelas últimas alterações.
+>
+> ### 4. Responsividade
+>
+> O layout deve manter a aparência da imagem 2 no dispositivo atual, mas sem utilizar valores que quebrem a interface em outras resoluções.
+>
+> Priorize:
+>
+> * `dp` para dimensões;
+> * `sp` para textos;
+> * `ConstraintLayout`, `LinearLayout` ou a estrutura já utilizada no projeto;
+> * `wrap_content` e `match_parent` quando apropriado.
+>
+> Não simplesmente aumente ou diminua tudo proporcionalmente. Reproduza as **proporções, espaçamentos e posicionamentos da imagem 2**.
+>
+> ### 5. Importante
+>
+> Antes de alterar o código, identifique o que mudou nas últimas alterações e preserve tudo que já estava funcionando.
+>
+> **Imagem 1 = estado atual com problema.**
+> **Imagem 2 = estado desejado e referência obrigatória.**
+>
+> Ao finalizar, verifique:
+>
+> 1. Paciente funciona ao tocar em qualquer ponto do card.
+> 2. Cuidador funciona ao tocar em qualquer ponto do card.
+> 3. O layout está visualmente alinhado à imagem 2.
+> 4. O tamanho da tela e dos componentes está equivalente à imagem 2.
+> 5. Nenhuma funcionalidade existente foi removida ou alterada.

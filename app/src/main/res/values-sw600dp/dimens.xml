@@ -44,7 +44,8 @@
 
     <!-- Tela inicial / tablet -->
     <dimen name="main_screen_padding">32dp</dimen>
-    <dimen name="main_content_margin_horizontal">8dp</dimen>
+    <dimen name="main_content_margin_horizontal">32dp</dimen>
+    <dimen name="main_logo_top_margin">40dp</dimen>
     <dimen name="main_logo_height">112dp</dimen>
     <dimen name="main_title_margin_top">34dp</dimen>
     <dimen name="main_title_text_size">32sp</dimen>
