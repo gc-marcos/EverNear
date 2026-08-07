@@ -25,6 +25,10 @@ android {
             )
         }
     }
+    buildFeatures {
+        buildConfig = true
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
@@ -33,6 +37,7 @@ android {
 
 dependencies {
 
+    implementation(libs.activity.ktx)
     implementation(libs.firebase.messaging)
     implementation(libs.play.services.wearable)
     implementation("com.google.android.gms:play-services-location:21.3.0")

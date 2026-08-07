@@ -83,6 +83,16 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
     /** Disparado pelo GeofenceReceiver quando o paciente sai da zona segura. */
     public static final String ACTION_GEOFENCE_EXIT = "com.marcoscarvalho.evernear.ACTION_GEOFENCE_EXIT";
 
+    /**
+     * [DEBUG ONLY] Disparado pela DebugLocationActivity para simular saída da zona segura.
+     * Só existe em BuildConfig.DEBUG == true; ignorado silenciosamente em Release.
+     * Extra obrigatório: EXTRA_DEBUG_LOCATION (Location parcelable).
+     */
+    public static final String ACTION_DEBUG_GEOFENCE_EXIT = "com.marcoscarvalho.evernear.ACTION_DEBUG_GEOFENCE_EXIT";
+
+    /** [DEBUG ONLY] Extra Location parcelable enviado junto com ACTION_DEBUG_GEOFENCE_EXIT. */
+    public static final String EXTRA_DEBUG_LOCATION = "extra_debug_location";
+
     // ── Extras para ACTION_ESCALAR ────────────────────────────────────────────
     private static final String EXTRA_ALERTA_ID      = "alertaId";
     private static final String EXTRA_PROXIMO_INDICE = "proximoIndice";
@@ -248,9 +258,22 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
                 return START_NOT_STICKY;
             }
 
-            // Saída da zona segura — dispara pelo GeofenceReceiver
+            // Saída da zona segura — dispara pelo GeofenceReceiver (produção)
             if (ACTION_GEOFENCE_EXIT.equals(action)) {
-                tratarSaidaGeofence();
+                tratarSaidaGeofenceComLocalizacao(null); // null = obter GPS real
+                return START_STICKY;
+            }
+
+            // [DEBUG ONLY] Saída simulada pela DebugLocationActivity
+            // Só executa em builds de debug; ignorado silenciosamente em Release.
+            if (BuildConfig.DEBUG && ACTION_DEBUG_GEOFENCE_EXIT.equals(action)) {
+                Location debugLocation = intent.getParcelableExtra(EXTRA_DEBUG_LOCATION);
+                Log.w(TAG, "ACTION_DEBUG_GEOFENCE_EXIT recebido: "
+                        + (debugLocation != null
+                        ? debugLocation.getLatitude() + ", " + debugLocation.getLongitude()
+                        : "location nula"));
+                // Passa diretamente a localização simulada — mesma cadeia de produção
+                tratarSaidaGeofenceComLocalizacao(debugLocation);
                 return START_STICKY;
             }
 
@@ -931,43 +954,69 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
     }
 
     /**
-     * Trata saída da zona segura detectada pelo sistema de Geofence.
+     * Ponto de entrada para saída da zona segura em PRODUÇÃO.
+     * Delega para {@link #tratarSaidaGeofenceComLocalizacao(Location)} com
+     * {@code locationOverride = null}, sinalizando que a localização deve
+     * ser obtida do GPS real via cache do FusedLocation.
      *
-     * Fluxo:
-     *  1. Obtém localização do cache do FusedLocation (zero-latência).
-     *  2. Salva localização no doc do paciente (para a tela do cuidador).
-     *  3. Dispara alerta "SAIDA_ZONA" com localização embarcada para todos os
-     *     cuidadores (mesma cadeia de escalada usada para anomalias cardíacas).
-     *
-     * Spec: "Fora da Área Segura" é o tipo de alerta (SAIDA_ZONA = código interno;
-     * CaregiverActivity exibe "📍 Saída da área segura" para esse tipo).
-     * A localização é independente do BPM — o alerta é enviado mesmo com BPM normal.
+     * Chamadores:
+     *   • {@link GeofenceReceiver} → {@code ACTION_GEOFENCE_EXIT}
      */
     private void tratarSaidaGeofence() {
-        Log.w(TAG, "Saída da zona segura — obtendo localização e enviando alerta");
+        tratarSaidaGeofenceComLocalizacao(null);
+    }
+
+    /**
+     * Lógica unificada de tratamento de saída da zona segura.
+     *
+     * <p>Este é o único método que contém as regras de negócio de saída de zona.
+     * Tanto a produção (GPS real) quanto o debug (localização simulada) passam
+     * por aqui — garantindo zero duplicação de lógica conforme os requisitos.</p>
+     *
+     * <p><b>Produção</b> ({@code locationOverride == null}):
+     * Obtém a última localização do cache do FusedLocation e usa como posição
+     * atual para o alerta.</p>
+     *
+     * <p><b>Debug</b> ({@code locationOverride != null}):
+     * Usa a localização simulada diretamente, sem chamar nenhuma API de GPS.
+     * O resultado é indistinguível de uma saída real: salva no Firestore,
+     * envia alerta com coordenadas embarcadas, aciona escalada se necessário.</p>
+     *
+     * @param locationOverride localização simulada (debug) ou {@code null} (produção)
+     */
+    private void tratarSaidaGeofenceComLocalizacao(@Nullable Location locationOverride) {
+        Log.w(TAG, "Saída da zona segura ["
+                + (locationOverride != null ? "DEBUG" : "GPS") + "] — enviando alerta");
 
         if (uidPaciente == null || cuidadoresVinculados.isEmpty()) {
             Log.w(TAG, "Saída da zona segura: dados do paciente ausentes — alerta omitido");
             return;
         }
 
-        LocationHelper.obterUltimaLocalizacaoRapida(this, new FirebaseHelper.Callback<Location>() {
-            @Override
-            public void onResult(Location loc) {
-                if (loc != null) {
-                    FirebaseHelper.salvarLocalizacaoEmergencia(uidPaciente, loc, null);
-                } else {
-                    // Fallback: request completo para atualizar doc do paciente
-                    LocationHelper.obterESalvarLocalizacao(HeartRateService.this, uidPaciente);
+        if (locationOverride != null) {
+            // ── Caminho DEBUG: localização já disponível, usar diretamente ──────
+            FirebaseHelper.salvarLocalizacaoEmergencia(uidPaciente, locationOverride, null);
+            // bpm=0 pois frequência cardíaca não é relevante para alertas de geofence
+            enviarAlertaParaCuidador(0, 0, "SAIDA_ZONA", locationOverride);
+        } else {
+            // ── Caminho PRODUÇÃO: obter última localização do cache do GPS ───────
+            LocationHelper.obterUltimaLocalizacaoRapida(this, new FirebaseHelper.Callback<Location>() {
+                @Override
+                public void onResult(Location loc) {
+                    if (loc != null) {
+                        FirebaseHelper.salvarLocalizacaoEmergencia(uidPaciente, loc, null);
+                    } else {
+                        // Fallback: request completo para atualizar doc do paciente
+                        LocationHelper.obterESalvarLocalizacao(HeartRateService.this, uidPaciente);
+                    }
+                    enviarAlertaParaCuidador(0, 0, "SAIDA_ZONA", loc);
                 }
-                // bpm=0 pois frequência cardíaca não é relevante para alertas de geofence
-                enviarAlertaParaCuidador(0, 0, "SAIDA_ZONA", loc);
-            }
-            @Override
-            public void onError(Exception e) {
-                enviarAlertaParaCuidador(0, 0, "SAIDA_ZONA", null);
-            }
-        });
+                @Override
+                public void onError(Exception e) {
+                    enviarAlertaParaCuidador(0, 0, "SAIDA_ZONA", null);
+                }
+            });
+        }
     }
 
     // ==================== Escalada de alertas ====================

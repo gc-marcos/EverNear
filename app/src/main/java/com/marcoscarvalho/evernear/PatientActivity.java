@@ -7,6 +7,7 @@ import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.os.Bundle;
+import android.view.View;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.TextView;
@@ -16,6 +17,8 @@ import androidx.appcompat.app.AlertDialog;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
+
+import com.marcoscarvalho.evernear.BuildConfig;
 
 /**
  * Tela principal do paciente no smartwatch.
@@ -59,6 +62,8 @@ public class PatientActivity extends AppCompatActivity implements HeartRateMonit
      */
     private int lastBpm = 0;
 
+    private  Button btnDebugGeo;
+
     // ==================== Ciclo de vida ====================
 
     @Override
@@ -72,6 +77,7 @@ public class PatientActivity extends AppCompatActivity implements HeartRateMonit
         btnEmergency = findViewById(R.id.btn_emergency);
         btnVerCodigo = findViewById(R.id.btn_ver_codigo);
         btnCalibrar  = findViewById(R.id.btn_calibrar);
+        btnDebugGeo = findViewById(R.id.btn_debug_geo);
 
         btnVerCodigo.setOnClickListener(v ->
                 startActivity(new Intent(this, DashboardPacienteActivity.class)));
@@ -81,6 +87,18 @@ public class PatientActivity extends AppCompatActivity implements HeartRateMonit
         btnCalibrar.setOnClickListener(v -> iniciarCalibracao());
 
         atualizarLimitesUI();
+
+        if (BuildConfig.DEBUG) {
+            btnDebugGeo.setVisibility(View.VISIBLE);
+            btnDebugGeo.setOnClickListener(v ->
+                    startActivity(new Intent(
+                            PatientActivity.this,
+                            com.marcoscarvalho.evernear.debug.DebugLocationActivity.class
+                    ))
+            );
+        } else {
+            btnDebugGeo.setVisibility(View.GONE);
+        }
     }
 
     @Override

@@ -217,6 +217,19 @@
             android:theme="@style/Theme.AppCompat.DayNight.NoActionBar" />
 
         <!--
+            Tela de debug de geolocalização (PACIENTE — smartwatch).
+            Permite simular posições e testar o geofencing em dispositivos físicos.
+
+            IMPORTANTE: Disponível somente em BuildConfig.DEBUG == true.
+            A Activity encerra imediatamente em builds Release (guarda em onCreate).
+            android:exported="false" — acesso somente via Intent explícito interno.
+        -->
+        <activity
+            android:name=".debug.DebugLocationActivity"
+            android:exported="false"
+            android:theme="@style/Theme.AppCompat.DayNight.NoActionBar" />
+
+        <!--
             Receptor de boot — reinicia o serviço correto quando o dispositivo é ligado.
             directBootAware="false": aguarda o desencriptamento do armazenamento (padrão seguro).
             Cobre reinicializações normais e reboots rápidos de alguns fabricantes (Huawei/HTC).
