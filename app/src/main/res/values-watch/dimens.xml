@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        Dimensões exclusivas para Wear OS (UI_MODE_TYPE_WATCH).
+        O layout base permanece igual; apenas reduzimos os espaçamentos para que
+        a sequência completa caiba na tela quadrada/compacta do relógio.
+        O celular continua usando values/values-sw320dp sem qualquer alteração.
+    -->
+    <dimen name="main_screen_padding">3dp</dimen>
+    <dimen name="main_content_margin_horizontal">3dp</dimen>
+    <dimen name="main_logo_top_margin">3dp</dimen>
+    <dimen name="main_logo_height">32dp</dimen>
+    <dimen name="main_title_margin_top">3dp</dimen>
+    <dimen name="main_title_text_size">15sp</dimen>
+    <dimen name="main_subtitle_margin_top">1dp</dimen>
+    <dimen name="main_subtitle_text_size">8sp</dimen>
+    <dimen name="main_prompt_top_margin">6dp</dimen>
+    <dimen name="main_prompt_bottom_margin">3dp</dimen>
+    <dimen name="main_prompt_text_size">9sp</dimen>
+    <dimen name="main_card_gap">3dp</dimen>
+    <dimen name="main_card_height">42dp</dimen>
+    <dimen name="main_card_radius">9dp</dimen>
+    <dimen name="main_card_padding_horizontal">5dp</dimen>
+    <dimen name="main_icon_container_size">30dp</dimen>
+    <dimen name="main_icon_padding">5dp</dimen>
+    <dimen name="main_card_text_gap">5dp</dimen>
+    <dimen name="main_card_description_top_margin">0dp</dimen>
+    <dimen name="main_card_title_text_size">11sp</dimen>
+    <dimen name="main_card_description_text_size">7sp</dimen>
+    <dimen name="main_arrow_size">16dp</dimen>
+    <dimen name="main_footer_bottom_margin">2dp</dimen>
+    <dimen name="main_footer_icon_gap">2dp</dimen>
+    <dimen name="main_footer_text_size">7sp</dimen>
+</resources>

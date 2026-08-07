@@ -1,0 +1,50 @@
+### Prompt
+
+> Corrija o layout da tela inicial do **EverNear especificamente para o smartwatch/Wear OS**.
+>
+> No **celular o layout atual está correto e deve permanecer exatamente como está**. O problema está apenas na versão exibida no relógio: os botões **“Paciente”** e **“Cuidador”** estão desaparecendo/cortados devido às dimensões e ao espaço vertical disponível.
+>
+> **Objetivo:** fazer os dois botões aparecerem completamente no smartwatch, mantendo o funcionamento atual e sem prejudicar o layout do celular.
+>
+> ### Regras importantes
+>
+> * **NÃO alterar o layout do celular.**
+> * Criar ou ajustar o comportamento específico para telas de **Wear OS/smartwatch**.
+> * Os cards **Paciente** e **Cuidador** precisam ficar totalmente visíveis e acessíveis no relógio.
+> * O usuário deve conseguir tocar nos dois cards normalmente.
+> * Caso o conteúdo não caiba na tela do relógio, utilize uma solução adequada para Wear OS, como:
+>
+>   * `ScrollView`/`NestedScrollView`, se compatível com a estrutura atual;
+>   * ajuste de `padding` e `margin`;
+>   * redução proporcional dos espaçamentos;
+>   * `ConstraintLayout` com dimensões responsivas;
+>   * ou outra solução apropriada para telas pequenas.
+> * **Não simplesmente esconder elementos ou remover os cards.**
+> * Não alterar textos, funcionalidades, navegação ou lógica do aplicativo.
+> * Não alterar Firebase, Activities, Services ou regras de negócio.
+>
+> ### Layout desejado no smartwatch
+>
+> A ordem deve permanecer:
+>
+> 1. Logo EverNear
+> 2. Título **EVER NEAR**
+> 3. Subtítulo **“Monitoramento com quem você ama”**
+> 4. Texto **“Como você vai usar o EverNear?”**
+> 5. Card **Paciente**
+> 6. Card **Cuidador**
+> 7. Rodapé **“Tecnologia com impacto social · Dados protegidos”**
+>
+> Os dois cards devem aparecer **inteiros**, sem serem cortados pela parte inferior da tela.
+>
+> ### Responsividade
+>
+> Identifique corretamente quando o layout está sendo executado em um **smartwatch/Wear OS** e aplique os ajustes necessários somente nesse dispositivo.
+>
+> **Celular:** manter exatamente o layout que já está funcionando.
+>
+> **Smartwatch:** adaptar dimensões e espaçamentos para que todo o conteúdo seja exibido corretamente.
+>
+> Antes de modificar o código, analise como o projeto atualmente diferencia o layout do celular e do smartwatch e utilize a estrutura já existente, evitando criar uma solução paralela desnecessária.
+>
+> **Resultado esperado:** no celular, nada deve mudar. No smartwatch, a tela deve apresentar os dois botões completos, visíveis e funcionais, sem cortes ou sobreposição.
