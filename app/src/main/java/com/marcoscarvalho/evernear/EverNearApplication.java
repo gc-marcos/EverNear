@@ -1,7 +1,6 @@
 package com.marcoscarvalho.evernear;
 
 import android.app.Application;
-import android.content.pm.PackageManager;
 import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkCapabilities;
@@ -72,9 +71,8 @@ public class EverNearApplication extends Application {
      */
     private void configurarFirestore() {
         try {
-            boolean isWatch = getPackageManager()
-                    .hasSystemFeature(PackageManager.FEATURE_WATCH);
-            long cacheSizeBytes = isWatch ? CACHE_WATCH : CACHE_PHONE;
+            boolean isPacienteDevice = DeviceClassifier.isPacienteDevice(this);
+            long cacheSizeBytes = isPacienteDevice ? CACHE_WATCH : CACHE_PHONE;
 
             FirebaseFirestoreSettings settings = new FirebaseFirestoreSettings.Builder()
                     .setPersistenceEnabled(true)
@@ -84,7 +82,7 @@ public class EverNearApplication extends Application {
             FirebaseFirestore.getInstance().setFirestoreSettings(settings);
 
             Log.i(TAG, "Firestore configurado"
-                    + " | dispositivo=" + (isWatch ? "smartwatch" : "celular/tablet")
+                    + " | dispositivo=" + (isPacienteDevice ? "compacto/paciente" : "celular/tablet")
                     + " | cache=" + (cacheSizeBytes / 1024 / 1024) + " MB"
                     + " | persistência=habilitada");
         } catch (Exception e) {

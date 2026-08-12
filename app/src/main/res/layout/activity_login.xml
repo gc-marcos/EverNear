@@ -15,116 +15,191 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:minHeight="@dimen/login_root_min_height"
-        android:padding="@dimen/login_screen_padding">
+        android:paddingStart="@dimen/login_screen_padding"
+        android:paddingEnd="@dimen/login_screen_padding"
+        android:paddingBottom="@dimen/login_screen_padding">
 
-        <!-- Parte superior: ícone coração com ECG + nome do app -->
+        <!-- Mantido no layout para preservar o recurso existente; a referência não usa o logo nesta tela. -->
         <ImageView
             android:id="@+id/img_heart_heartbeat"
             android:layout_width="@dimen/login_heart_size"
             android:layout_height="@dimen/login_heart_size"
             android:contentDescription="@string/icon_heart_description"
-            app:srcCompat="@mipmap/ic_launcher"
-            app:layout_constraintEnd_toEndOf="parent"
+            android:visibility="gone"
+            app:srcCompat="@mipmap/ic_launcher" />
+
+        <ImageView
+            android:id="@+id/login_back_icon"
+            android:layout_width="@dimen/login_back_size"
+            android:layout_height="@dimen/login_back_size"
+            android:layout_marginTop="@dimen/login_back_margin_top"
+            android:contentDescription="@string/login_back_description"
+            android:src="@drawable/ic_login_back"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
-            android:layout_marginTop="@dimen/login_heart_margin_top" />
+            app:layout_constraintTop_toTopOf="parent" />
 
         <TextView
             android:id="@+id/tv_app_name"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="@string/app_name"
-            android:textColor="@color/login_text_primary"
-            android:textSize="@dimen/login_app_name_text_size"
+            android:layout_marginTop="@dimen/login_role_margin_top"
+            android:background="@drawable/bg_login_role_pill"
+            android:drawableStart="@drawable/ic_login_patient"
+            android:drawablePadding="@dimen/login_role_icon_gap"
+            android:gravity="center_vertical"
+            android:includeFontPadding="false"
+            android:paddingStart="@dimen/login_role_padding_horizontal"
+            android:paddingEnd="@dimen/login_role_padding_horizontal"
+            android:paddingTop="@dimen/login_role_padding_vertical"
+            android:paddingBottom="@dimen/login_role_padding_vertical"
+            android:text="@string/login_role_patient"
+            android:textColor="@color/login_role_text"
+            android:textSize="@dimen/login_role_text_size"
             android:textStyle="bold"
-            android:letterSpacing="0.05"
-            android:maxLines="1"
-            android:ellipsize="end"
-            app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/img_heart_heartbeat"
-            android:layout_marginTop="@dimen/login_app_name_margin_top" />
+            app:layout_constraintTop_toBottomOf="@id/login_back_icon" />
 
-        <!-- Card do formulário: largura máxima em tablets, centralizado -->
+        <TextView
+            android:id="@+id/login_welcome_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/login_title_margin_top"
+            android:fontFamily="sans"
+            android:includeFontPadding="false"
+            android:text="@string/login_welcome_title"
+            android:textColor="@color/login_text_primary"
+            android:textSize="@dimen/login_title_text_size"
+            android:textStyle="bold"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/tv_app_name" />
+
+        <TextView
+            android:id="@+id/login_welcome_subtitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/login_subtitle_margin_top"
+            android:fontFamily="sans"
+            android:includeFontPadding="false"
+            android:text="@string/login_welcome_subtitle"
+            android:textColor="@color/login_text_secondary"
+            android:textSize="@dimen/login_subtitle_text_size"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/login_welcome_title" />
+
+        <!-- O container continua mantendo os campos usados no login/cadastro. -->
         <LinearLayout
             android:id="@+id/card_login"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:background="@drawable/bg_login_card"
-            android:elevation="@dimen/login_card_elevation"
+            android:layout_marginTop="@dimen/login_form_margin_top"
             android:orientation="vertical"
-            android:padding="@dimen/login_card_padding"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/tv_app_name"
-            app:layout_constraintWidth_max="@dimen/login_card_max_width"
-            android:layout_marginTop="@dimen/login_card_margin_top">
+            app:layout_constraintTop_toBottomOf="@id/login_welcome_subtitle"
+            app:layout_constraintWidth_max="@dimen/login_card_max_width">
 
-            <!-- Nome completo (visível apenas no modo cadastro) -->
+            <TextView
+                android:id="@+id/tv_nome_label"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="@dimen/login_label_margin_bottom"
+                android:fontFamily="sans"
+                android:includeFontPadding="false"
+                android:text="@string/login_name_label"
+                android:textColor="@color/login_label_text"
+                android:textSize="@dimen/login_label_text_size"
+                android:visibility="gone" />
+
             <EditText
                 android:id="@+id/et_nome"
                 android:layout_width="match_parent"
                 android:layout_height="@dimen/login_input_height"
+                android:layout_marginBottom="@dimen/login_input_margin_bottom"
                 android:background="@drawable/bg_input_login"
-                android:drawableStart="@drawable/ic_email_phone"
-                android:drawablePadding="@dimen/login_input_drawable_padding"
                 android:gravity="center_vertical"
-                android:hint="Seu nome completo"
+                android:hint="@string/login_hint_name"
+                android:includeFontPadding="false"
                 android:inputType="textPersonName|textCapWords"
                 android:paddingStart="@dimen/login_input_padding_h"
                 android:paddingEnd="@dimen/login_input_padding_h"
                 android:textColor="@color/login_text_primary"
                 android:textColorHint="@color/login_text_secondary"
                 android:textSize="@dimen/login_input_text_size"
-                android:layout_marginBottom="@dimen/login_input_margin_bottom"
                 android:visibility="gone" />
 
-            <!-- Telefone (visível apenas no cadastro de PACIENTE) -->
+            <TextView
+                android:id="@+id/tv_telefone_label"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="@dimen/login_label_margin_bottom"
+                android:fontFamily="sans"
+                android:includeFontPadding="false"
+                android:text="@string/login_phone_label"
+                android:textColor="@color/login_label_text"
+                android:textSize="@dimen/login_label_text_size"
+                android:visibility="gone" />
+
             <EditText
                 android:id="@+id/et_telefone"
                 android:layout_width="match_parent"
                 android:layout_height="@dimen/login_input_height"
+                android:layout_marginBottom="@dimen/login_input_margin_bottom"
                 android:background="@drawable/bg_input_login"
-                android:drawableStart="@drawable/ic_email_phone"
-                android:drawablePadding="@dimen/login_input_drawable_padding"
                 android:gravity="center_vertical"
-                android:hint="Telefone do paciente (com DDD)"
+                android:hint="@string/login_hint_phone"
+                android:includeFontPadding="false"
                 android:inputType="phone"
                 android:paddingStart="@dimen/login_input_padding_h"
                 android:paddingEnd="@dimen/login_input_padding_h"
                 android:textColor="@color/login_text_primary"
                 android:textColorHint="@color/login_text_secondary"
                 android:textSize="@dimen/login_input_text_size"
-                android:layout_marginBottom="@dimen/login_input_margin_bottom"
                 android:visibility="gone" />
 
-            <!-- Email ou telefone (campo cápsula) -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="@dimen/login_label_margin_bottom"
+                android:fontFamily="sans"
+                android:includeFontPadding="false"
+                android:text="@string/login_email_label"
+                android:textColor="@color/login_label_text"
+                android:textSize="@dimen/login_label_text_size" />
+
             <EditText
                 android:id="@+id/et_email_phone"
                 android:layout_width="match_parent"
                 android:layout_height="@dimen/login_input_height"
+                android:layout_marginBottom="@dimen/login_field_gap"
                 android:background="@drawable/bg_input_login"
-                android:drawableStart="@drawable/ic_email_phone"
-                android:drawablePadding="@dimen/login_input_drawable_padding"
                 android:gravity="center_vertical"
                 android:hint="@string/login_hint_email_phone"
+                android:includeFontPadding="false"
                 android:inputType="textEmailAddress"
                 android:paddingStart="@dimen/login_input_padding_h"
                 android:paddingEnd="@dimen/login_input_padding_h"
                 android:textColor="@color/login_text_primary"
                 android:textColorHint="@color/login_text_secondary"
-                android:textSize="@dimen/login_input_text_size"
-                android:layout_marginBottom="@dimen/login_input_margin_bottom" />
+                android:textSize="@dimen/login_input_text_size" />
 
-            <!-- Senha (campo cápsula + ícone olho) -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="@dimen/login_label_margin_bottom"
+                android:fontFamily="sans"
+                android:includeFontPadding="false"
+                android:text="@string/login_password_label"
+                android:textColor="@color/login_label_text"
+                android:textSize="@dimen/login_label_text_size" />
+
             <com.google.android.material.textfield.TextInputLayout
                 android:id="@+id/til_password"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 app:boxBackgroundMode="none"
-                app:endIconMode="password_toggle"
                 app:endIconDrawable="@drawable/ic_eye"
-                app:endIconTint="@color/login_text_primary"
+                app:endIconMode="password_toggle"
+                app:endIconTint="@color/login_text_secondary"
                 app:hintEnabled="false">
 
                 <com.google.android.material.textfield.TextInputEditText
@@ -132,10 +207,9 @@
                     android:layout_width="match_parent"
                     android:layout_height="@dimen/login_input_height"
                     android:background="@drawable/bg_input_login"
-                    android:drawableStart="@drawable/ic_password"
-                    android:drawablePadding="@dimen/login_input_drawable_padding"
                     android:gravity="center_vertical"
                     android:hint="@string/login_hint_password"
+                    android:includeFontPadding="false"
                     android:inputType="textPassword"
                     android:paddingStart="@dimen/login_input_padding_h"
                     android:paddingEnd="@dimen/login_input_padding_h"
@@ -145,34 +219,53 @@
             </com.google.android.material.textfield.TextInputLayout>
         </LinearLayout>
 
-        <!-- Botão ENTRAR (cápsula, vermelho médico, brilho suave) -->
         <Button
             android:id="@+id/btn_login"
             android:layout_width="0dp"
             android:layout_height="@dimen/login_btn_height"
+            android:layout_marginTop="@dimen/login_btn_margin_top"
             android:background="@drawable/btn_login_primary"
+            android:fontFamily="sans"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:minHeight="0dp"
+            android:padding="0dp"
             android:text="@string/login_button_entrar"
             android:textColor="@color/login_text_primary"
             android:textSize="@dimen/login_btn_text_size"
             android:textStyle="bold"
-            android:elevation="@dimen/login_btn_elevation"
             app:layout_constraintEnd_toEndOf="@id/card_login"
             app:layout_constraintStart_toStartOf="@id/card_login"
             app:layout_constraintTop_toBottomOf="@id/card_login"
-            app:layout_constraintWidth_max="@dimen/login_card_max_width"
-            android:layout_marginTop="@dimen/login_btn_margin_top" />
+            app:layout_constraintWidth_max="@dimen/login_card_max_width" />
 
-        <!-- Texto de segurança: cadeado verde + "Seus dados são protegidos" -->
+        <TextView
+            android:id="@+id/tv_create_account"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/login_footer_margin_top"
+            android:clickable="true"
+            android:focusable="true"
+            android:fontFamily="sans"
+            android:includeFontPadding="false"
+            android:padding="@dimen/login_footer_padding"
+            android:text="@string/login_first_access"
+            android:textColor="@color/login_text_secondary"
+            android:textSize="@dimen/login_footer_text_size"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/btn_login" />
+
         <LinearLayout
             android:id="@+id/layout_security"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/login_security_margin_top"
             android:gravity="center"
             android:orientation="horizontal"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/btn_login"
-            android:layout_marginTop="@dimen/login_security_margin_top">
+            app:layout_constraintTop_toBottomOf="@id/tv_create_account">
 
             <ImageView
                 android:id="@+id/img_lock_security"
@@ -186,24 +279,11 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="@dimen/login_security_icon_margin_end"
+                android:fontFamily="sans"
+                android:includeFontPadding="false"
                 android:text="@string/login_security_message"
                 android:textColor="@color/login_text_secondary"
                 android:textSize="@dimen/login_security_text_size" />
         </LinearLayout>
-
-        <!-- Rodapé: Primeiro acesso? Criar conta (cinza) -->
-        <TextView
-            android:id="@+id/tv_create_account"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/login_footer_margin_top"
-            android:padding="@dimen/login_footer_padding"
-            android:text="@string/login_first_access"
-            android:textColor="@color/login_text_secondary"
-            android:textSize="20sp"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/layout_security" />
     </androidx.constraintlayout.widget.ConstraintLayout>
 </ScrollView>

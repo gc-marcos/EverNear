@@ -40,7 +40,7 @@
     <!-- Rodapé -->
     <dimen name="login_footer_margin_top">24dp</dimen>
     <dimen name="login_footer_padding">24dp</dimen>
-    <dimen name="login_footer_text_size">15sp</dimen>
+    <dimen name="login_footer_text_size">16sp</dimen>
 
     <!-- Tela inicial / tablet -->
     <dimen name="main_screen_padding">32dp</dimen>

@@ -2,14 +2,19 @@ package com.marcoscarvalho.evernear;
 
 import android.content.Intent;
 import android.os.Bundle;
+import android.text.SpannableString;
+import android.text.Spanned;
+import android.text.style.ForegroundColorSpan;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.ContextCompat;
 
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
@@ -37,6 +42,11 @@ public class LoginActivity extends AppCompatActivity {
         setContentView(R.layout.activity_login);
 
         userType = getIntent().getStringExtra("userType");
+        if (DeviceClassifier.isPacienteDevice(this)
+                && !FirebaseHelper.isPaciente(userType)
+                && !FirebaseHelper.isCuidador(userType)) {
+            userType = "patient";
+        }
 
         mAuth = FirebaseAuth.getInstance();
         db    = FirebaseFirestore.getInstance();
@@ -48,12 +58,52 @@ public class LoginActivity extends AppCompatActivity {
         btnLogin      = findViewById(R.id.btn_login);
         tvCreateAccount = findViewById(R.id.tv_create_account);
 
+        configurarAparenciaPorPerfil();
+
         btnLogin.setOnClickListener(v -> {
             if (isModoCadastro) realizarCadastro();
             else realizarLogin();
         });
 
         tvCreateAccount.setOnClickListener(v -> alternarModo());
+    }
+
+    /**
+     * A mesma Activity atende os dois perfis. Apenas o estado visual e a seta
+     * mudam de acordo com o tipo recebido da MainActivity.
+     */
+    private void configurarAparenciaPorPerfil() {
+        TextView roleView = findViewById(R.id.tv_app_name);
+        ImageView backView = findViewById(R.id.login_back_icon);
+        boolean ehCuidador = FirebaseHelper.isCuidador(userType);
+
+        if (ehCuidador) {
+            roleView.setText(R.string.login_role_caregiver);
+            roleView.setTextColor(ContextCompat.getColor(
+                    this, R.color.login_role_caregiver_text));
+            roleView.setBackgroundResource(R.drawable.bg_login_role_caregiver);
+            roleView.setCompoundDrawablesWithIntrinsicBounds(
+                    ContextCompat.getDrawable(this, R.drawable.ic_login_caregiver),
+                    null, null, null);
+            btnLogin.setBackgroundResource(R.drawable.btn_login_caregiver);
+        } else {
+            roleView.setText(R.string.login_role_patient);
+            roleView.setTextColor(ContextCompat.getColor(
+                    this, R.color.login_role_patient_text));
+            roleView.setBackgroundResource(R.drawable.bg_login_role_patient);
+            roleView.setCompoundDrawablesWithIntrinsicBounds(
+                    ContextCompat.getDrawable(this, R.drawable.ic_login_patient),
+                    null, null, null);
+            btnLogin.setBackgroundResource(R.drawable.btn_login_primary);
+        }
+
+        atualizarTextoConta();
+
+        boolean ocultarSeta = DeviceClassifier.isPacienteDevice(this) && !ehCuidador;
+        backView.setVisibility(ocultarSeta ? View.GONE : View.VISIBLE);
+        if (!ocultarSeta) {
+            backView.setOnClickListener(v -> finish());
+        }
     }
 
     // ==================== Alternar login / cadastro ====================
@@ -63,22 +113,56 @@ public class LoginActivity extends AppCompatActivity {
 
         if (isModoCadastro) {
             etNome.setVisibility(View.VISIBLE);
+            findViewById(R.id.tv_nome_label).setVisibility(View.VISIBLE);
             etNome.requestFocus();
 
             // Campo de telefone só aparece para pacientes
-            etTelefone.setVisibility(
-                    FirebaseHelper.isPaciente(userType) ? View.VISIBLE : View.GONE);
+            boolean ehPaciente = FirebaseHelper.isPaciente(userType);
+            etTelefone.setVisibility(ehPaciente ? View.VISIBLE : View.GONE);
+            findViewById(R.id.tv_telefone_label).setVisibility(
+                    ehPaciente ? View.VISIBLE : View.GONE);
 
-            btnLogin.setText("CADASTRAR");
-            tvCreateAccount.setText("Já tenho conta → Entrar");
+            btnLogin.setText(R.string.login_button_cadastrar);
+            atualizarTextoConta();
         } else {
             etNome.setVisibility(View.GONE);
             etNome.setText("");
+            findViewById(R.id.tv_nome_label).setVisibility(View.GONE);
             etTelefone.setVisibility(View.GONE);
             etTelefone.setText("");
-            btnLogin.setText("ENTRAR");
-            tvCreateAccount.setText("Primeiro acesso? Criar conta");
+            findViewById(R.id.tv_telefone_label).setVisibility(View.GONE);
+            btnLogin.setText(R.string.login_button_entrar);
+            atualizarTextoConta();
         }
+    }
+
+    /**
+     * Mantém a parte acionável do texto na mesma cor do perfil selecionado,
+     * sem alterar o TextView nem o listener usado para alternar o modo.
+     */
+    private void atualizarTextoConta() {
+        int textoColorido = ContextCompat.getColor(
+                this,
+                FirebaseHelper.isCuidador(userType)
+                        ? R.color.login_role_caregiver_text
+                        : R.color.login_role_patient_text);
+        String texto = getString(isModoCadastro
+                ? R.string.login_have_account
+                : R.string.login_first_access);
+        String acao = getString(isModoCadastro
+                ? R.string.login_sign_in_action
+                : R.string.login_create_account_action);
+
+        SpannableString textoFormatado = new SpannableString(texto);
+        int inicioAcao = texto.lastIndexOf(acao);
+        if (inicioAcao >= 0) {
+            textoFormatado.setSpan(
+                    new ForegroundColorSpan(textoColorido),
+                    inicioAcao,
+                    inicioAcao + acao.length(),
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+        tvCreateAccount.setText(textoFormatado);
     }
 
     // ==================== Login ====================

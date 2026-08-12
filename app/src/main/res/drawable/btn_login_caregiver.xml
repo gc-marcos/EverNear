@@ -2,13 +2,13 @@
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_pressed="true">
         <shape android:shape="rectangle">
-            <solid android:color="@color/login_red_pressed" />
+            <solid android:color="@color/login_green_caregiver_pressed" />
             <corners android:radius="@dimen/login_btn_corner_radius" />
         </shape>
     </item>
     <item>
         <shape android:shape="rectangle">
-            <solid android:color="@color/login_red_medical" />
+            <solid android:color="@color/login_green_caregiver" />
             <corners android:radius="@dimen/login_btn_corner_radius" />
         </shape>
     </item>

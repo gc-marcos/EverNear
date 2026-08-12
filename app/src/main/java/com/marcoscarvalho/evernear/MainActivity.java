@@ -19,6 +19,18 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        // Dispositivos com smallestScreenWidthDp <= 360dp começam diretamente
+        // no login do paciente. A ActivityMain continua sendo o ponto launcher
+        // para preservar a configuração existente, mas não exibe sua interface
+        // nesse fluxo.
+        if (DeviceClassifier.isPacienteDevice(this)
+                && FirebaseAuth.getInstance().getCurrentUser() == null) {
+            abrirLoginPaciente();
+            finish();
+            return;
+        }
+
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_main);
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.cl_main_activity), (v, insets) -> {
@@ -44,6 +56,12 @@ public class MainActivity extends AppCompatActivity {
 
         // Verifica se já existe sessão ativa e redireciona, pulando o login
         verificarSessao();
+    }
+
+    private void abrirLoginPaciente() {
+        Intent intent = new Intent(MainActivity.this, LoginActivity.class);
+        intent.putExtra("userType", "patient");
+        startActivity(intent);
     }
 
     private void verificarSessao() {

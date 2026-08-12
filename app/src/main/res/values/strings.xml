@@ -8,11 +8,26 @@
 
     <!-- Tela de Login -->
     <string name="icon_heart_description">Ícone de coração</string>
+    <string name="login_back_description">Voltar</string>
+    <string name="login_role_patient">Paciente</string>
+    <string name="login_role_caregiver">Cuidador</string>
+    <string name="login_welcome_title">Bem-vindo</string>
+    <string name="login_welcome_subtitle">Entre com sua conta EverNear</string>
+    <string name="login_email_label">E-mail</string>
+    <string name="login_password_label">Senha</string>
+    <string name="login_hint_name">Seu nome completo</string>
+    <string name="login_hint_phone">Telefone do paciente (com DDD)</string>
+    <string name="login_name_label">Nome</string>
+    <string name="login_phone_label">Telefone</string>
     <string name="login_hint_email_phone">Email ou telefone</string>
     <string name="login_hint_password">Senha</string>
     <string name="login_button_entrar">ENTRAR</string>
+    <string name="login_button_cadastrar">CADASTRAR</string>
     <string name="login_security_message">Seus dados são protegidos</string>
-    <string name="login_first_access">Primeiro acesso? Criar conta</string>
+    <string name="login_first_access">Primeiro acesso? → Criar conta</string>
+    <string name="login_create_account_action">Criar conta</string>
+    <string name="login_have_account">Já tenho conta → Entrar</string>
+    <string name="login_sign_in_action">Entrar</string>
 
     <!-- Tela do Cuidador -->
     <string name="caregiver_back">Voltar</string>
