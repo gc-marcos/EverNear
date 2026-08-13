@@ -1,137 +1,355 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/image_bg"
+    android:background="@drawable/bg_patient_screen"
+    android:paddingStart="@dimen/patient_screen_padding"
+    android:paddingEnd="@dimen/patient_screen_padding"
     tools:context=".PatientActivity">
 
-    <ImageView
-        android:id="@+id/iv_heart_icon"
-        android:layout_width="40dp"
-        android:layout_height="40dp"
-        android:src="@drawable/ic_heart_heartbeat"
-        app:layout_constraintTop_toTopOf="parent"
+    <TextView
+        android:id="@+id/tv_patient_greeting"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/patient_header_margin_top"
+        android:fontFamily="sans"
+        android:includeFontPadding="false"
+        android:text="@string/patient_greeting_default"
+        android:textColor="@color/patient_text_muted"
+        android:textSize="@dimen/patient_title_text_size"
+        android:textStyle="bold"
+        app:layout_constraintEnd_toStartOf="@id/btn_patient_qr"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginTop="16dp" />
+        app:layout_constraintTop_toTopOf="parent" />
 
     <TextView
-        android:id="@+id/tv_bpm_value"
+        android:id="@+id/tv_patient_title"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="--"
-        android:textSize="48sp"
-        android:textColor="@android:color/white"
-        app:layout_constraintTop_toBottomOf="@id/iv_heart_icon"
+        android:fontFamily="sans"
+        android:includeFontPadding="false"
+        android:text="@string/patient_title"
+        android:textColor="@color/patient_text_primary"
+        android:textSize="@dimen/patient_title_text_size"
+        android:textStyle="bold"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginTop="8dp" />
+        app:layout_constraintTop_toBottomOf="@id/tv_patient_greeting" />
 
-    <TextView
-        android:id="@+id/tv_bpm_label"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="bpm"
-        android:textSize="16sp"
-        android:textColor="@android:color/white"
-        app:layout_constraintTop_toBottomOf="@id/tv_bpm_value"
+    <ImageButton
+        android:id="@+id/btn_patient_qr"
+        android:layout_width="@dimen/patient_qr_size"
+        android:layout_height="@dimen/patient_qr_size"
+        android:layout_marginTop="@dimen/patient_header_margin_top"
+        android:background="@drawable/bg_patient_qr"
+        android:contentDescription="@string/patient_qr_description"
+        android:padding="@dimen/patient_qr_padding"
+        android:src="@drawable/ic_qr_code"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <FrameLayout
+        android:id="@+id/patient_monitor_ring"
+        android:layout_width="@dimen/patient_ring_size"
+        android:layout_height="@dimen/patient_ring_size"
+        android:layout_marginTop="@dimen/patient_ring_margin_top"
+        android:clipChildren="true"
+        android:clipToPadding="true"
+        app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
+        app:layout_constraintTop_toBottomOf="@id/tv_patient_title">
+
+        <View
+            android:id="@+id/patient_ring_outer"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/bg_patient_ring_outer" />
+
+        <View
+            android:id="@+id/patient_ring_middle"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_margin="@dimen/patient_ring_middle_inset"
+            android:background="@drawable/bg_patient_ring_middle" />
+
+        <View
+            android:id="@+id/patient_ring_inner"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_margin="@dimen/patient_ring_inner_inset"
+            android:background="@drawable/bg_patient_ring_inner" />
+
+        <LinearLayout
+            android:id="@+id/patient_ring_content"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tv_calibration_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/patient_calibrating_title"
+                android:textColor="@color/patient_text_secondary"
+                android:textSize="@dimen/patient_ring_label_text_size"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/tv_calibration_percent"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:includeFontPadding="false"
+                android:text="0%"
+                android:textColor="@color/patient_text_primary"
+                android:textSize="@dimen/patient_calibration_percent_text_size"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/tv_calibration_subtitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/patient_calibrating_subtitle"
+                android:textColor="@color/patient_text_muted"
+                android:textSize="@dimen/patient_ring_label_text_size"
+                android:visibility="gone" />
+
+            <ImageView
+                android:id="@+id/iv_bpm_heart"
+                android:layout_width="@dimen/patient_heart_size"
+                android:layout_height="@dimen/patient_heart_size"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_patient_heart" />
+
+            <TextView
+                android:id="@+id/tv_bpm_value"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:includeFontPadding="false"
+                android:text="--"
+                android:textColor="@color/patient_text_primary"
+                android:textSize="@dimen/patient_bpm_text_size"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tv_bpm_label"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/patient_bpm_label"
+                android:textColor="@color/patient_text_muted"
+                android:textSize="@dimen/patient_bpm_label_text_size" />
+        </LinearLayout>
+    </FrameLayout>
 
     <TextView
         android:id="@+id/tv_status"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
+        android:layout_marginTop="@dimen/patient_status_margin_top"
+        android:background="@drawable/bg_patient_status"
         android:gravity="center"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp"
-        android:text="Aguardando sensor..."
-        android:textColor="#9AA4B2"
-        android:textSize="24sp"
+        android:paddingStart="@dimen/patient_status_padding_horizontal"
+        android:paddingEnd="@dimen/patient_status_padding_horizontal"
+        android:paddingTop="@dimen/patient_status_padding_vertical"
+        android:paddingBottom="@dimen/patient_status_padding_vertical"
+        android:text="@string/patient_status_waiting"
+        android:textColor="@color/patient_status_neutral"
+        android:textSize="@dimen/patient_status_text_size"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/tv_bpm_label" />
+        app:layout_constraintTop_toBottomOf="@id/patient_monitor_ring" />
 
-    <!-- Limites configurados (mín/máx) -->
-    <TextView
-        android:id="@+id/tv_limites"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
-        android:text="Limites: 50–120 bpm"
-        android:textColor="#6E7681"
-        android:textSize="20sp"
+    <LinearLayout
+        android:id="@+id/patient_stats"
+        android:layout_width="0dp"
+        android:layout_height="@dimen/patient_stats_height"
+        android:layout_marginTop="@dimen/patient_stats_margin_top"
+        android:background="@drawable/bg_patient_card"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:paddingStart="@dimen/patient_stats_padding"
+        android:paddingEnd="@dimen/patient_stats_padding"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/tv_status" />
+        app:layout_constraintTop_toBottomOf="@id/tv_status">
 
-    <!-- Botão de calibração -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/patient_minimum"
+                android:textColor="@color/patient_text_muted"
+                android:textSize="@dimen/patient_stat_label_text_size" />
+
+            <TextView
+                android:id="@+id/tv_minimo_value"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/patient_stat_value_margin_top"
+                android:text="-- bpm"
+                android:textColor="@color/patient_stat_min"
+                android:textSize="@dimen/patient_stat_value_text_size"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="1dp"
+            android:layout_height="match_parent"
+            android:background="@color/patient_divider" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/patient_maximum"
+                android:textColor="@color/patient_text_muted"
+                android:textSize="@dimen/patient_stat_label_text_size" />
+
+            <TextView
+                android:id="@+id/tv_maximo_value"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/patient_stat_value_margin_top"
+                android:text="-- bpm"
+                android:textColor="@color/patient_stat_max"
+                android:textSize="@dimen/patient_stat_value_text_size"
+                android:textStyle="bold" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/card_vinculo"
+        android:layout_width="0dp"
+        android:layout_height="@dimen/patient_control_height"
+        android:layout_marginTop="@dimen/patient_link_margin_top"
+        android:background="@drawable/bg_patient_card"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="@dimen/patient_link_padding_horizontal"
+        android:paddingEnd="@dimen/patient_link_padding_horizontal"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/patient_stats">
+
+        <ImageView
+            android:layout_width="@dimen/patient_link_icon_size"
+            android:layout_height="@dimen/patient_link_icon_size"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_link_shield" />
+
+        <TextView
+            android:id="@+id/tv_status_vinculo"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/patient_link_text_margin"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="@string/patient_no_caregiver"
+            android:textColor="@color/patient_text_secondary"
+            android:textSize="@dimen/patient_link_text_size" />
+
+        <Button
+            android:id="@+id/btn_ver_codigo"
+            android:clickable="true"
+            android:focusable="true"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:background="@android:color/transparent"
+            android:gravity="center"
+            android:minHeight="48dp"
+            android:minWidth="48dp"
+            android:paddingStart="@dimen/patient_link_action_padding"
+            android:paddingEnd="0dp"
+            android:paddingTop="0dp"
+            android:paddingBottom="0dp"
+            android:text="@string/patient_link_action"
+            android:textColor="@color/patient_action_red"
+            android:textSize="@dimen/patient_link_action_text_size"
+            android:textStyle="bold" />
+    </LinearLayout>
+
     <Button
         android:id="@+id/btn_calibrar"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:text="Calibrar (em repouso)"
-        android:backgroundTint="#2EA043"
-        android:textColor="@android:color/white"
-        app:layout_constraintBottom_toTopOf="@id/btn_ver_codigo"
-        app:layout_constraintStart_toStartOf="parent"
+        android:clickable="true"
+        android:focusable="true"
+        android:layout_width="wrap_content"
+        android:layout_height="@dimen/patient_control_height"
+        android:layout_marginTop="@dimen/patient_recalibrate_margin_top"
+        android:background="@drawable/bg_patient_secondary_button"
+        android:gravity="center"
+        android:insetTop="0dp"
+        android:insetBottom="0dp"
+        android:minHeight="48dp"
+        android:minWidth="48dp"
+        android:paddingStart="@dimen/patient_secondary_button_padding"
+        android:paddingEnd="@dimen/patient_secondary_button_padding"
+        android:paddingTop="0dp"
+        android:paddingBottom="0dp"
+        android:text="@string/patient_recalibrate"
+        android:textAllCaps="false"
+        android:textColor="@color/patient_text_secondary"
+        android:textSize="@dimen/patient_secondary_button_text_size"
         app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginStart="16dp"
-        android:layout_marginEnd="16dp"
-        android:layout_marginBottom="8dp" />
-
-    <!-- Botão para ver o código de sincronização com o cuidador -->
-    <Button
-        android:id="@+id/btn_ver_codigo"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:text="Ver Código de Sincronização"
-        android:backgroundTint="#1F6FEB"
-        android:textColor="@android:color/white"
-        app:layout_constraintBottom_toTopOf="@id/btn_emergency"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginStart="16dp"
-        android:layout_marginEnd="16dp"
-        android:layout_marginBottom="8dp" />
+        app:layout_constraintTop_toBottomOf="@id/card_vinculo" />
 
-    <!--
-        [DEBUG ONLY] Botão de acesso ao modo debug de geolocalização.
-        Controlado programaticamente em PatientActivity: visível somente quando
-        BuildConfig.DEBUG == true. Em builds Release este botão fica GONE
-        e não ocupa espaço na tela.
-    -->
+    <!-- IDs preservados para a lógica existente e para o modo debug. -->
+    <TextView
+        android:id="@+id/tv_limites"
+        android:layout_width="1dp"
+        android:layout_height="1dp"
+        android:visibility="gone" />
+
     <Button
         android:id="@+id/btn_debug_geo"
-        android:layout_width="wrap_content"
-        android:layout_height="32dp"
-        android:text="🐛 Debug GPS"
-        android:textSize="10sp"
-        android:textColor="#FF9800"
-        android:backgroundTint="@android:color/transparent"
-        android:visibility="gone"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginTop="4dp"
-        android:layout_marginEnd="4dp" />
+        android:layout_width="1dp"
+        android:layout_height="1dp"
+        android:visibility="gone" />
 
-    <!-- Botão de emergência -->
     <Button
         android:id="@+id/btn_emergency"
+        android:clickable="true"
+        android:focusable="true"
         android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:text="EMERGÊNCIA"
-        android:backgroundTint="#FF0000"
-        android:textColor="@android:color/white"
+        android:layout_height="@dimen/patient_control_height"
+        android:layout_marginTop="@dimen/patient_emergency_margin_top"
+        android:layout_marginBottom="@dimen/patient_emergency_margin_bottom"
+        android:background="@drawable/bg_patient_emergency_button"
+        android:fontFamily="sans"
+        android:insetTop="0dp"
+        android:insetBottom="0dp"
+        android:padding="0dp"
+        android:minHeight="48dp"
+        android:minWidth="48dp"
+        android:text="@string/patient_emergency"
+        android:textColor="@color/patient_text_primary"
+        android:textSize="@dimen/patient_emergency_text_size"
+        android:textStyle="bold"
+        app:icon="@drawable/ic_emergency"
+        app:iconGravity="textStart"
+        app:iconPadding="@dimen/patient_emergency_icon_padding"
+        app:iconTint="@color/patient_text_primary"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginStart="16dp"
-        android:layout_marginEnd="16dp"
-        android:layout_marginBottom="16dp"
-        app:icon="@android:drawable/ic_dialog_alert" />
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/btn_calibrar" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

@@ -19,6 +19,8 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 
 import com.marcoscarvalho.evernear.BuildConfig;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.firestore.FirebaseFirestore;
 
 /**
  * Tela principal do paciente no smartwatch.
@@ -40,7 +42,12 @@ import com.marcoscarvalho.evernear.BuildConfig;
 public class PatientActivity extends AppCompatActivity implements HeartRateMonitor.Listener {
 
     private TextView tvBpmValue, tvStatus, tvLimites;
+    private TextView tvGreeting, tvCalibrationTitle, tvCalibrationPercent,
+            tvCalibrationSubtitle, tvStatusVinculo, tvMinimo, tvMaximo;
+    private View bpmHeart;
+    private View ringOuter, ringMiddle, ringInner, cardVinculo;
     private Button   btnEmergency, btnVerCodigo, btnCalibrar;
+    private static final int CALIBRATION_SAMPLES_FOR_UI = 30;
 
     // Controla se a tela deve ficar acesa (apenas durante calibração)
     private boolean telaAcesaParaCalibracao = false;
@@ -74,19 +81,37 @@ public class PatientActivity extends AppCompatActivity implements HeartRateMonit
         tvBpmValue   = findViewById(R.id.tv_bpm_value);
         tvStatus     = findViewById(R.id.tv_status);
         tvLimites    = findViewById(R.id.tv_limites);
+        tvGreeting   = findViewById(R.id.tv_patient_greeting);
+        tvCalibrationTitle = findViewById(R.id.tv_calibration_title);
+        tvCalibrationPercent = findViewById(R.id.tv_calibration_percent);
+        tvCalibrationSubtitle = findViewById(R.id.tv_calibration_subtitle);
+        tvStatusVinculo = findViewById(R.id.tv_status_vinculo);
+        tvMinimo = findViewById(R.id.tv_minimo_value);
+        tvMaximo = findViewById(R.id.tv_maximo_value);
+        bpmHeart = findViewById(R.id.iv_bpm_heart);
+        ringOuter = findViewById(R.id.patient_ring_outer);
+        ringMiddle = findViewById(R.id.patient_ring_middle);
+        ringInner = findViewById(R.id.patient_ring_inner);
+        cardVinculo = findViewById(R.id.card_vinculo);
         btnEmergency = findViewById(R.id.btn_emergency);
         btnVerCodigo = findViewById(R.id.btn_ver_codigo);
         btnCalibrar  = findViewById(R.id.btn_calibrar);
         btnDebugGeo = findViewById(R.id.btn_debug_geo);
 
-        btnVerCodigo.setOnClickListener(v ->
-                startActivity(new Intent(this, DashboardPacienteActivity.class)));
+        View.OnClickListener abrirDashboard = v ->
+                startActivity(new Intent(this, DashboardPacienteActivity.class));
+        btnVerCodigo.setOnClickListener(abrirDashboard);
+        cardVinculo.setOnClickListener(abrirDashboard);
+        findViewById(R.id.btn_patient_qr).setOnClickListener(abrirDashboard);
 
         btnEmergency.setOnClickListener(v -> dispararEmergenciaManual());
 
         btnCalibrar.setOnClickListener(v -> iniciarCalibracao());
 
+        mostrarCalibracao(0, CALIBRATION_SAMPLES_FOR_UI);
         atualizarLimitesUI();
+        atualizarVinculoUI();
+        carregarNomePaciente();
 
         if (BuildConfig.DEBUG) {
             btnDebugGeo.setVisibility(View.VISIBLE);
@@ -120,6 +145,8 @@ public class PatientActivity extends AppCompatActivity implements HeartRateMonit
         HeartRateService svc = HeartRateService.getInstance();
         if (svc != null && svc.getMonitor() != null && svc.getMonitor().isCalibrating()) {
             manterTelaAcesa(true);
+        } else if (svc != null && svc.getMonitor() != null) {
+            mostrarMonitoramento();
         }
 
         // Registra receiver para detectar GPS desativado enquanto esta tela está visível.
@@ -199,6 +226,7 @@ public class PatientActivity extends AppCompatActivity implements HeartRateMonit
         // Mantém tela acesa durante a calibração (evita que o timeout de inatividade
         // apague a tela e, em alguns dispositivos, suspenda o sensor)
         manterTelaAcesa(true);
+        mostrarCalibracao(0, CALIBRATION_SAMPLES_FOR_UI);
 
         Intent intent = new Intent(this, HeartRateService.class);
         intent.setAction(HeartRateService.ACTION_CALIBRAR);
@@ -245,6 +273,7 @@ public class PatientActivity extends AppCompatActivity implements HeartRateMonit
         runOnUiThread(() -> {
             tvBpmValue.setText(String.valueOf(bpm));
             atualizarStatusVisual(bpm);
+            atualizarVinculoUI();
         });
     }
 
@@ -253,6 +282,9 @@ public class PatientActivity extends AppCompatActivity implements HeartRateMonit
         runOnUiThread(() -> {
             tvStatus.setText(status);
             tvStatus.setTextColor(Color.parseColor("#9AA4B2"));
+            if (status != null && status.toLowerCase().contains("calibr")) {
+                mostrarCalibracaoAtual();
+            }
         });
     }
 
@@ -271,6 +303,7 @@ public class PatientActivity extends AppCompatActivity implements HeartRateMonit
         runOnUiThread(() -> {
             tvStatus.setText("Calibrando... " + collected + "/" + total);
             tvStatus.setTextColor(Color.parseColor("#FFC107"));
+            mostrarCalibracao(collected, total);
             // Garante que a tela continua acesa durante cada leitura de calibração
             manterTelaAcesa(true);
         });
@@ -286,6 +319,7 @@ public class PatientActivity extends AppCompatActivity implements HeartRateMonit
 
             tvStatus.setText("Calibrado — baseline " + baseline + " bpm");
             tvStatus.setTextColor(Color.parseColor("#4CAF50"));
+            mostrarMonitoramento();
             atualizarLimitesUI();
 
             Toast.makeText(this,
@@ -340,15 +374,97 @@ public class PatientActivity extends AppCompatActivity implements HeartRateMonit
     private void atualizarLimitesUI() {
         HeartRateService svc = HeartRateService.getInstance();
         if (svc != null && svc.getMonitor() != null) {
-            tvLimites.setText("Limites: "
-                    + svc.getMonitor().getBpmMin() + "–"
-                    + svc.getMonitor().getBpmMax() + " bpm");
+            atualizarValoresLimites(
+                    svc.getMonitor().getBpmMin(), svc.getMonitor().getBpmMax());
         } else {
             SharedPreferences p = getSharedPreferences("heart_rate_prefs", MODE_PRIVATE);
-            tvLimites.setText("Limites: "
-                    + p.getInt("bpm_min", 50) + "–"
-                    + p.getInt("bpm_max", 120) + " bpm");
+            atualizarValoresLimites(
+                    p.getInt("bpm_min", 50), p.getInt("bpm_max", 120));
         }
+    }
+
+    private void atualizarValoresLimites(int min, int max) {
+        tvLimites.setText("Limites: " + min + "–" + max + " bpm");
+        tvMinimo.setText(min + " bpm");
+        tvMaximo.setText(max + " bpm");
+    }
+
+    private void mostrarCalibracaoAtual() {
+        HeartRateService svc = HeartRateService.getInstance();
+        if (svc != null && svc.getMonitor() != null
+                && svc.getMonitor().isCalibrating()) {
+            mostrarCalibracao(0, CALIBRATION_SAMPLES_FOR_UI);
+        }
+    }
+
+    private void mostrarCalibracao(int collected, int total) {
+        tvCalibrationTitle.setVisibility(View.VISIBLE);
+        tvCalibrationPercent.setVisibility(View.VISIBLE);
+        tvCalibrationSubtitle.setVisibility(View.VISIBLE);
+        tvBpmValue.setVisibility(View.GONE);
+        bpmHeart.setVisibility(View.GONE);
+        findViewById(R.id.tv_bpm_label).setVisibility(View.GONE);
+        findViewById(R.id.patient_stats).setVisibility(View.GONE);
+        btnCalibrar.setText(R.string.patient_calibrating_button);
+        btnCalibrar.setEnabled(false);
+        btnCalibrar.setAlpha(0.65f);
+
+        int percent = total <= 0 ? 0 : Math.min(100, collected * 100 / total);
+        tvCalibrationPercent.setText(percent + "%");
+        atualizarRings(false);
+    }
+
+    private void mostrarMonitoramento() {
+        tvCalibrationTitle.setVisibility(View.GONE);
+        tvCalibrationPercent.setVisibility(View.GONE);
+        tvCalibrationSubtitle.setVisibility(View.GONE);
+        tvBpmValue.setVisibility(View.VISIBLE);
+        bpmHeart.setVisibility(View.VISIBLE);
+        findViewById(R.id.tv_bpm_label).setVisibility(View.VISIBLE);
+        findViewById(R.id.patient_stats).setVisibility(View.VISIBLE);
+        btnCalibrar.setText(R.string.patient_recalibrate);
+        btnCalibrar.setEnabled(true);
+        btnCalibrar.setAlpha(1f);
+        atualizarRings(true);
+    }
+
+    private void atualizarRings(boolean normal) {
+        int outer = ContextCompat.getColor(this,
+                normal ? R.color.patient_ring_outer_normal : R.color.patient_ring_outer);
+        int middle = ContextCompat.getColor(this,
+                normal ? R.color.patient_ring_middle_normal : R.color.patient_ring_middle);
+        int inner = ContextCompat.getColor(this,
+                normal ? R.color.patient_ring_normal : R.color.patient_ring_inner);
+        ringOuter.setBackgroundTintList(
+                android.content.res.ColorStateList.valueOf(outer));
+        ringMiddle.setBackgroundTintList(
+                android.content.res.ColorStateList.valueOf(middle));
+        ringInner.setBackgroundTintList(
+                android.content.res.ColorStateList.valueOf(inner));
+    }
+
+    private void atualizarVinculoUI() {
+        HeartRateService svc = HeartRateService.getInstance();
+        int quantidade = svc == null ? 0 : svc.getCuidadoresVinculados().size();
+        tvStatusVinculo.setText(quantidade == 0
+                ? getString(R.string.patient_no_caregiver)
+                : getString(R.string.patient_linked_caregivers, quantidade));
+        btnVerCodigo.setText(quantidade == 0
+                ? R.string.patient_link_action
+                : R.string.patient_view_code);
+    }
+
+    private void carregarNomePaciente() {
+        String uid = FirebaseAuth.getInstance().getUid();
+        if (uid == null) return;
+        FirebaseFirestore.getInstance().collection("users").document(uid).get()
+                .addOnSuccessListener(doc -> {
+                    if (!doc.exists()) return;
+                    String apelido = doc.getString(FirebaseHelper.Fields.APELIDO);
+                    String nome = doc.getString(FirebaseHelper.Fields.NOME);
+                    tvGreeting.setText("Olá, "
+                            + FirebaseHelper.nomeExibir(apelido, nome, "Paciente"));
+                });
     }
 
     private void atualizarStatusVisual(int bpm) {

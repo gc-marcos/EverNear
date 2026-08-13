@@ -43,4 +43,34 @@
     <color name="main_patient_icon">#F04455</color>
     <color name="main_caregiver_icon">#24D36B</color>
     <color name="main_arrow">#718098</color>
+
+    <!-- Tela do paciente no smartwatch -->
+    <color name="patient_background">#0C1428</color>
+    <color name="patient_card_background">#111D34</color>
+    <color name="patient_card_stroke">#20314D</color>
+    <color name="patient_qr_background">#1A2942</color>
+    <color name="patient_text_primary">#F4F7FC</color>
+    <color name="patient_text_secondary">#AAB5C8</color>
+    <color name="patient_text_muted">#77839A</color>
+    <color name="patient_ring_outer">#273650</color>
+    <color name="patient_ring_middle">#3B4B65</color>
+    <color name="patient_ring_inner">#AFBDD3</color>
+    <color name="patient_ring_normal">#24D36B</color>
+    <color name="patient_ring_outer_normal">#15513E</color>
+    <color name="patient_ring_middle_normal">#1A6B4C</color>
+    <color name="patient_ring_outer_calibrating">#273650</color>
+    <color name="patient_status_background">#17372F</color>
+    <color name="patient_status_stroke">#245B48</color>
+    <color name="patient_status_neutral">#B4C0D3</color>
+    <color name="patient_status_normal">#24D36B</color>
+    <color name="patient_status_warning">#FFC107</color>
+    <color name="patient_status_alert">#FF5262</color>
+    <color name="patient_divider">#20314D</color>
+    <color name="patient_stat_min">#FFB56F</color>
+    <color name="patient_stat_max">#FF5262</color>
+    <color name="patient_link_icon">#24D36B</color>
+    <color name="patient_action_red">#FF5262</color>
+    <color name="patient_secondary_button_background">#182842</color>
+    <color name="patient_emergency">#EF3348</color>
+    <color name="patient_emergency_pressed">#D72C3F</color>
 </resources>

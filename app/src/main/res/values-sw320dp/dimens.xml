@@ -84,4 +84,46 @@
     <dimen name="main_footer_bottom_margin">8dp</dimen>
     <dimen name="main_footer_icon_gap">6dp</dimen>
     <dimen name="main_footer_text_size">11sp</dimen>
+
+    <!-- Tela do paciente compacta -->
+    <dimen name="patient_screen_padding">12dp</dimen>
+    <dimen name="patient_header_margin_top">12dp</dimen>
+    <dimen name="patient_greeting_text_size">10sp</dimen>
+    <dimen name="patient_title_text_size">20sp</dimen>
+    <dimen name="patient_qr_size">32dp</dimen>
+    <dimen name="patient_qr_padding">7dp</dimen>
+    <dimen name="patient_ring_size">130dp</dimen>
+    <dimen name="patient_ring_margin_top">2dp</dimen>
+    <dimen name="patient_ring_middle_inset">12dp</dimen>
+    <dimen name="patient_ring_inner_inset">27dp</dimen>
+    <dimen name="patient_ring_label_text_size">10sp</dimen>
+    <dimen name="patient_heart_size">20dp</dimen>
+    <dimen name="patient_calibration_percent_text_size">34sp</dimen>
+    <dimen name="patient_bpm_text_size">32sp</dimen>
+    <dimen name="patient_bpm_label_text_size">9sp</dimen>
+    <dimen name="patient_status_margin_top">6dp</dimen>
+    <dimen name="patient_status_padding_horizontal">10dp</dimen>
+    <dimen name="patient_status_padding_vertical">3dp</dimen>
+    <dimen name="patient_status_text_size">11sp</dimen>
+    <dimen name="patient_stats_height">42dp</dimen>
+    <dimen name="patient_stats_margin_top">4dp</dimen>
+    <dimen name="patient_stat_label_text_size">9sp</dimen>
+    <dimen name="patient_stat_value_text_size">14sp</dimen>
+    <dimen name="patient_link_height">30dp</dimen>
+    <dimen name="patient_control_height">30dp</dimen>
+    <dimen name="patient_link_margin_top">4dp</dimen>
+    <dimen name="patient_link_padding_horizontal">9dp</dimen>
+    <dimen name="patient_link_icon_size">16dp</dimen>
+    <dimen name="patient_link_text_margin">6dp</dimen>
+    <dimen name="patient_link_text_size">10sp</dimen>
+    <dimen name="patient_link_action_text_size">10sp</dimen>
+    <dimen name="patient_recalibrate_margin_top">3dp</dimen>
+    <dimen name="patient_secondary_button_height">30dp</dimen>
+    <dimen name="patient_secondary_button_padding">8dp</dimen>
+    <dimen name="patient_secondary_button_text_size">10sp</dimen>
+    <dimen name="patient_emergency_height">30dp</dimen>
+    <dimen name="patient_emergency_margin_top">3dp</dimen>
+    <dimen name="patient_emergency_margin_bottom">6dp</dimen>
+    <dimen name="patient_emergency_text_size">11sp</dimen>
+    <dimen name="patient_emergency_icon_padding">4dp</dimen>
 </resources>

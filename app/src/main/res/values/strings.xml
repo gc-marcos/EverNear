@@ -29,6 +29,24 @@
     <string name="login_have_account">Já tenho conta → Entrar</string>
     <string name="login_sign_in_action">Entrar</string>
 
+    <!-- Tela do paciente no smartwatch -->
+    <string name="patient_greeting_default">Olá, Paciente</string>
+    <string name="patient_title">Monitoramento</string>
+    <string name="patient_qr_description">Abrir código de vínculo</string>
+    <string name="patient_calibrating_title">Calibrando</string>
+    <string name="patient_calibrating_subtitle">fique em repouso</string>
+    <string name="patient_bpm_label">bpm</string>
+    <string name="patient_status_waiting">Aguardando sensor...</string>
+    <string name="patient_minimum">Mínimo</string>
+    <string name="patient_maximum">Máximo</string>
+    <string name="patient_no_caregiver">Nenhum cuidador vinculado</string>
+    <string name="patient_linked_caregivers">%1$d cuidador(es) vinculado(s)</string>
+    <string name="patient_link_action">Vincular</string>
+    <string name="patient_view_code">Ver código</string>
+    <string name="patient_recalibrate">↻  Recalibrar limites</string>
+    <string name="patient_calibrating_button">⟳  Calibrando...</string>
+    <string name="patient_emergency">EMERGÊNCIA</string>
+
     <!-- Tela do Cuidador -->
     <string name="caregiver_back">Voltar</string>
     <string name="caregiver_alert_title">ALERTA</string>
