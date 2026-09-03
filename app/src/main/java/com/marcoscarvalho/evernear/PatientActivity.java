@@ -405,7 +405,6 @@ public class PatientActivity extends AppCompatActivity implements HeartRateMonit
         bpmHeart.setVisibility(View.GONE);
         findViewById(R.id.tv_bpm_label).setVisibility(View.GONE);
         findViewById(R.id.patient_stats).setVisibility(View.GONE);
-        btnCalibrar.setText(R.string.patient_calibrating_button);
         btnCalibrar.setEnabled(false);
         btnCalibrar.setAlpha(0.65f);
 
@@ -422,7 +421,6 @@ public class PatientActivity extends AppCompatActivity implements HeartRateMonit
         bpmHeart.setVisibility(View.VISIBLE);
         findViewById(R.id.tv_bpm_label).setVisibility(View.VISIBLE);
         findViewById(R.id.patient_stats).setVisibility(View.VISIBLE);
-        btnCalibrar.setText(R.string.patient_recalibrate);
         btnCalibrar.setEnabled(true);
         btnCalibrar.setAlpha(1f);
         atualizarRings(true);
@@ -449,9 +447,9 @@ public class PatientActivity extends AppCompatActivity implements HeartRateMonit
         tvStatusVinculo.setText(quantidade == 0
                 ? getString(R.string.patient_no_caregiver)
                 : getString(R.string.patient_linked_caregivers, quantidade));
-        btnVerCodigo.setText(quantidade == 0
-                ? R.string.patient_link_action
-                : R.string.patient_view_code);
+        btnVerCodigo.setContentDescription(quantidade == 0
+                ? "Vincular cuidador"
+                : "Ver código de vinculação");
     }
 
     private void carregarNomePaciente() {

@@ -51,7 +51,7 @@ public class DashboardPacienteActivity extends AppCompatActivity {
     private static final String TAG = "DashboardPaciente";
 
     // ── Views ─────────────────────────────────────────────────────────────────
-    private TextView     tvWelcome, tvCodigo, tvStatus;
+    private TextView     tvWelcome, tvCodigo, tvStatus, tvMonitoramentoVinculo;
     private LinearLayout llCuidadoresVinculados;
     private CardView     cardStatusSaude;
     private TextView     tvUltimoBpm, tvUltimaSync, tvStatusMonitor;
@@ -89,13 +89,12 @@ public class DashboardPacienteActivity extends AppCompatActivity {
         tvWelcome            = findViewById(R.id.tv_welcome_paciente);
         tvCodigo             = findViewById(R.id.tv_codigo_vinculo);
         tvStatus             = findViewById(R.id.tv_status_vinculo);
-        llCuidadoresVinculados = findViewById(R.id.ll_cuidadores_vinculados);
-        cardStatusSaude      = findViewById(R.id.card_status_saude);
-        tvUltimoBpm          = findViewById(R.id.tv_ultimo_bpm);
-        tvUltimaSync         = findViewById(R.id.tv_ultima_sync);
-        tvStatusMonitor      = findViewById(R.id.tv_status_monitor);
-        etApelido            = findViewById(R.id.et_apelido_paciente);
-        btnSalvarApelido     = findViewById(R.id.btn_salvar_apelido_paciente);
+//        tvMonitoramentoVinculo = findViewById(R.id.tv_monitoramento_vinculo);
+//        llCuidadoresVinculados = findViewById(R.id.ll_cuidadores_vinculados);
+//        cardStatusSaude      = findViewById(R.id.card_status_saude);
+//        tvUltimoBpm          = findViewById(R.id.tv_ultimo_bpm);
+//        tvUltimaSync         = findViewById(R.id.tv_ultima_sync);
+//        tvStatusMonitor      = findViewById(R.id.tv_status_monitor);
         btnShare             = findViewById(R.id.btn_share_codigo);
 
         db  = FirebaseFirestore.getInstance();
@@ -125,7 +124,6 @@ public class DashboardPacienteActivity extends AppCompatActivity {
             }
         });
 
-        btnSalvarApelido.setOnClickListener(v -> salvarApelido());
     }
 
     /**
@@ -169,18 +167,6 @@ public class DashboardPacienteActivity extends AppCompatActivity {
                     if (!snapshot.exists()) {
                         Log.w(TAG, "Documento do usuário não encontrado");
                         return;
-                    }
-
-                    // ── Saudação ──────────────────────────────────────────────
-                    String nome    = snapshot.getString("nome");
-                    String apelido = snapshot.getString("apelido");
-                    String exibir  = (apelido != null && !apelido.isEmpty()) ? apelido : nome;
-                    if (exibir != null) tvWelcome.setText("Olá, " + exibir);
-
-                    // Preenche campo de apelido somente se vazio (não sobrescreve edição em curso)
-                    if (apelido != null && !apelido.isEmpty()
-                            && etApelido.getText().toString().isEmpty()) {
-                        etApelido.setText(apelido);
                     }
 
                     // ── Código de vínculo ─────────────────────────────────────
@@ -279,7 +265,12 @@ public class DashboardPacienteActivity extends AppCompatActivity {
         if (uids == null || uids.isEmpty()) {
             tvStatus.setText("Compartilhe este código com seu cuidador");
             tvStatus.setTextColor(Color.parseColor("#9AA4B2"));
-            llCuidadoresVinculados.setVisibility(View.GONE);
+            if (tvMonitoramentoVinculo != null) {
+                tvMonitoramentoVinculo.setVisibility(View.GONE);
+            }
+            if (llCuidadoresVinculados != null) {
+                llCuidadoresVinculados.setVisibility(View.GONE);
+            }
             return;
         }
 
@@ -331,13 +322,15 @@ public class DashboardPacienteActivity extends AppCompatActivity {
                 : total + " cuidadores vinculados";
         tvStatus.setText(textoStatus);
         tvStatus.setTextColor(Color.parseColor("#4CAF50"));
+        if (tvMonitoramentoVinculo != null) {
+            tvMonitoramentoVinculo.setVisibility(View.VISIBLE);
+        }
 
-        // Cards individuais
-        llCuidadoresVinculados.removeAllViews();
-        llCuidadoresVinculados.setVisibility(View.VISIBLE);
-
-        for (DadosCuidador d : dados) {
-            adicionarCardCuidador(d);
+        // Os dados individuais continuam sendo carregados para preservar a
+        // lógica existente, mas esta Activity exibe apenas o resumo do vínculo.
+        if (llCuidadoresVinculados != null) {
+            llCuidadoresVinculados.removeAllViews();
+            llCuidadoresVinculados.setVisibility(View.GONE);
         }
     }
 
@@ -395,6 +388,10 @@ public class DashboardPacienteActivity extends AppCompatActivity {
      * Campos opcionais — não causa crash se ausentes.
      */
     private void atualizarStatusSaude(com.google.firebase.firestore.DocumentSnapshot snapshot) {
+        // Este método continua disponível para o fluxo existente, mas o
+        // dashboard de vinculação não exibe informações de saúde.
+        if (cardStatusSaude == null) return;
+
         Long   bpmLong       = snapshot.getLong("ultimoBpm");
         Long   syncMs        = snapshot.getLong("ultimaAtualizacao");
         String statusMonitor = snapshot.getString("statusMonitoramento");

@@ -2,175 +2,143 @@
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#0D1117"
+    android:background="@color/patient_background"
     android:fillViewport="true">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="24dp"
-        android:gravity="center_horizontal">
+        android:gravity="center_horizontal"
+        android:padding="@dimen/patient_screen_padding">
 
-        <!-- Boas-vindas -->
         <TextView
             android:id="@+id/tv_welcome_paciente"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Olá, Paciente"
-            android:textColor="#FFFFFF"
-            android:textSize="24sp"
-            android:textStyle="bold"
-            android:layout_marginTop="24dp" />
+            android:layout_marginTop="@dimen/patient_header_margin_top"
+            android:text="Meu Código"
+            android:textColor="@color/patient_text_primary"
+            android:textSize="@dimen/patient_title_text_size"
+            android:textStyle="bold" />
 
-        <!-- Apelido do paciente -->
+        <!-- QR Code decorativo da área de vinculação. -->
+        <FrameLayout
+            android:layout_width="82dp"
+            android:layout_height="82dp"
+            android:layout_marginTop="18dp"
+            android:background="@drawable/bg_patient_ring_outer"
+            android:padding="9dp">
+
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@drawable/bg_patient_ring_middle"
+                android:padding="8dp">
+
+                <ImageView
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="@drawable/bg_patient_qr"
+                    android:contentDescription="Ícone de QR Code"
+                    android:padding="10dp"
+                    android:src="@drawable/ic_qr_code"
+                    android:tint="@color/login_red_medical" />
+            </FrameLayout>
+        </FrameLayout>
+
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Seu apelido"
-            android:textColor="#9AA4B2"
-            android:textSize="13sp"
-            android:layout_marginTop="16dp" />
+            android:layout_marginTop="18dp"
+            android:text="Código de Vinculação"
+            android:textColor="@color/patient_text_primary"
+            android:textSize="21sp"
+            android:textStyle="bold" />
 
         <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginTop="6dp">
-
-            <EditText
-                android:id="@+id/et_apelido_paciente"
-                android:layout_width="0dp"
-                android:layout_height="50dp"
-                android:layout_weight="1"
-                android:background="#161B22"
-                android:hint="Ex: Vovô, Maria, João"
-                android:textColor="#FFFFFF"
-                android:textColorHint="#9AA4B2"
-                android:padding="12dp"
-                android:maxLines="1" />
-
-            <Button
-                android:id="@+id/btn_salvar_apelido_paciente"
-                android:layout_width="wrap_content"
-                android:layout_height="50dp"
-                android:text="Salvar"
-                android:backgroundTint="#1F6FEB"
-                android:textColor="#FFFFFF"
-                android:layout_marginStart="8dp" />
-        </LinearLayout>
-
-        <!-- Card: Código de Vínculo -->
-        <androidx.cardview.widget.CardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="24dp"
-            android:backgroundTint="#161B22">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:gravity="center"
-                android:padding="24dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Seu Código de Vínculo:"
-                    android:textColor="#9AA4B2"
-                    android:textSize="14sp" />
-
-                <TextView
-                    android:id="@+id/tv_codigo_vinculo"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="------"
-                    android:textColor="#FFFFFF"
-                    android:textSize="48sp"
-                    android:textStyle="bold"
-                    android:letterSpacing="0.2"
-                    android:layout_marginTop="8dp" />
-
-                <Button
-                    android:id="@+id/btn_share_codigo"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Compartilhar Código"
-                    android:layout_marginTop="16dp"
-                    android:backgroundTint="#E10600" />
-            </LinearLayout>
-        </androidx.cardview.widget.CardView>
-
-        <!-- Status geral do vínculo -->
-        <TextView
-            android:id="@+id/tv_status_vinculo"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:gravity="center"
-            android:text="Compartilhe este código com seu cuidador"
-            android:textAlignment="center"
-            android:textColor="#9AA4B2"
-            android:textSize="16sp" />
-
-        <!-- Lista de cuidadores vinculados (visível quando há ao menos 1 cuidador) -->
-        <LinearLayout
-            android:id="@+id/ll_cuidadores_vinculados"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:background="@drawable/bg_patient_card"
+            android:gravity="center_horizontal"
             android:orientation="vertical"
-            android:layout_marginTop="12dp"
-            android:visibility="gone" />
+            android:padding="20dp">
 
-        <!-- Card: Status do monitoramento cardíaco (visível quando dados disponíveis) -->
-        <androidx.cardview.widget.CardView
-            android:id="@+id/card_status_saude"
+            <TextView
+                android:id="@+id/tv_codigo_vinculo"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="monospace"
+                android:letterSpacing="0.16"
+                android:text="------"
+                android:textColor="@color/login_red_medical"
+                android:textSize="36sp"
+                android:textStyle="bold" />
+
+            <Button
+                android:id="@+id/btn_share_codigo"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:backgroundTint="@color/login_red_medical"
+                android:drawableStart="@android:drawable/ic_menu_share"
+                android:drawableTint="@color/patient_text_primary"
+                android:minHeight="0dp"
+                android:paddingStart="14dp"
+                android:paddingTop="9dp"
+                android:paddingEnd="14dp"
+                android:paddingBottom="9dp"
+                android:text="Compartilhar"
+                android:textAllCaps="false"
+                android:textColor="@color/patient_text_primary"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <!-- Status de cuidadores vinculados. -->
+        <LinearLayout
+            android:id="@+id/card_status_vinculo"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            android:layout_marginBottom="32dp"
-            android:backgroundTint="#161B22"
-            android:visibility="gone">
+            android:background="@drawable/bg_patient_card"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:padding="14dp">
+
+            <ImageView
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:contentDescription="Vínculo protegido"
+                android:src="@drawable/ic_link_shield" />
 
             <LinearLayout
-                android:layout_width="match_parent"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="20dp">
+                android:layout_marginStart="10dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
 
                 <TextView
-                    android:layout_width="wrap_content"
+                    android:id="@+id/tv_status_vinculo"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Status do Monitoramento"
-                    android:textColor="#9AA4B2"
-                    android:textSize="13sp" />
-
-                <TextView
-                    android:id="@+id/tv_ultimo_bpm"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:textColor="#FFFFFF"
-                    android:textSize="16sp"
-                    android:layout_marginTop="8dp" />
-
-                <TextView
-                    android:id="@+id/tv_ultima_sync"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:textColor="#9AA4B2"
+                    android:text="Compartilhe este código com seu cuidador"
+                    android:textColor="@color/patient_text_primary"
                     android:textSize="14sp"
-                    android:layout_marginTop="4dp" />
+                    android:textStyle="bold" />
 
                 <TextView
-                    android:id="@+id/tv_status_monitor"
-                    android:layout_width="wrap_content"
+                    android:id="@+id/tv_monitoramento_vinculo"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:textSize="14sp"
-                    android:layout_marginTop="4dp" />
-
+                    android:layout_marginTop="2dp"
+                    android:text="Você está sendo monitorado"
+                    android:textColor="@color/patient_text_muted"
+                    android:textSize="12sp"
+                    android:visibility="gone" />
             </LinearLayout>
-        </androidx.cardview.widget.CardView>
+        </LinearLayout>
 
     </LinearLayout>
 </ScrollView>

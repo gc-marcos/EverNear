@@ -21,8 +21,28 @@
         android:textColor="@color/patient_text_muted"
         android:textSize="@dimen/patient_title_text_size"
         android:textStyle="bold"
-        app:layout_constraintEnd_toStartOf="@id/btn_patient_qr"
+        app:layout_constraintEnd_toStartOf="@id/btn_debug_geo"
         app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <!-- Disponível somente em builds de debug; ocupa espaço real quando exibido. -->
+    <Button
+        android:id="@+id/btn_debug_geo"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:layout_marginStart="4dp"
+        android:layout_marginTop="@dimen/patient_header_margin_top"
+        android:background="@drawable/bg_patient_circle_button"
+        android:contentDescription="Abrir ferramentas de debug de localização"
+        android:drawableTop="@drawable/ic_debug_location"
+        android:gravity="center"
+        android:insetTop="0dp"
+        android:insetBottom="0dp"
+        android:minWidth="0dp"
+        android:minHeight="0dp"
+        android:padding="7dp"
+        android:text=""
+        app:layout_constraintEnd_toStartOf="@id/btn_patient_qr"
         app:layout_constraintTop_toTopOf="parent" />
 
     <TextView
@@ -235,121 +255,77 @@
     <LinearLayout
         android:id="@+id/card_vinculo"
         android:layout_width="0dp"
-        android:layout_height="@dimen/patient_control_height"
-        android:layout_marginTop="@dimen/patient_link_margin_top"
-        android:background="@drawable/bg_patient_card"
-        android:clickable="true"
-        android:focusable="true"
-        android:gravity="center_vertical"
+        android:layout_height="@dimen/patient_action_button_size"
+        android:layout_marginBottom="@dimen/patient_emergency_margin_bottom"
+        android:gravity="center"
         android:orientation="horizontal"
-        android:paddingStart="@dimen/patient_link_padding_horizontal"
-        android:paddingEnd="@dimen/patient_link_padding_horizontal"
+        android:weightSum="3"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/patient_stats">
-
-        <ImageView
-            android:layout_width="@dimen/patient_link_icon_size"
-            android:layout_height="@dimen/patient_link_icon_size"
-            android:contentDescription="@null"
-            android:src="@drawable/ic_link_shield" />
+        app:layout_constraintBottom_toBottomOf="parent">
 
         <TextView
             android:id="@+id/tv_status_vinculo"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="@dimen/patient_link_text_margin"
-            android:layout_weight="1"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:text="@string/patient_no_caregiver"
-            android:textColor="@color/patient_text_secondary"
-            android:textSize="@dimen/patient_link_text_size" />
+            android:layout_width="1dp"
+            android:layout_height="1dp"
+            android:visibility="gone" />
 
         <Button
             android:id="@+id/btn_ver_codigo"
-            android:clickable="true"
-            android:focusable="true"
-            android:layout_width="wrap_content"
-            android:layout_height="match_parent"
-            android:background="@android:color/transparent"
+            android:layout_width="@dimen/patient_action_button_size"
+            android:layout_height="@dimen/patient_action_button_size"
+            android:layout_marginEnd="@dimen/patient_action_button_gap"
+            android:background="@drawable/bg_patient_circle_button"
+            android:contentDescription="Vincular cuidador e ver código"
+            android:drawableTop="@drawable/ic_link_shield"
             android:gravity="center"
-            android:minHeight="48dp"
-            android:minWidth="48dp"
-            android:paddingStart="@dimen/patient_link_action_padding"
-            android:paddingEnd="0dp"
-            android:paddingTop="0dp"
-            android:paddingBottom="0dp"
-            android:text="@string/patient_link_action"
-            android:textColor="@color/patient_action_red"
-            android:textSize="@dimen/patient_link_action_text_size"
-            android:textStyle="bold" />
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:padding="9dp"
+            android:text=""
+            android:drawableTint="@color/patient_link_icon" />
+
+        <Button
+            android:id="@+id/btn_calibrar"
+            android:layout_width="@dimen/patient_action_button_size"
+            android:layout_height="@dimen/patient_action_button_size"
+            android:layout_marginEnd="@dimen/patient_action_button_gap"
+            android:background="@drawable/bg_patient_circle_button"
+            android:contentDescription="Recalibrar limites"
+            android:drawableTop="@drawable/ic_recalibrate"
+            android:gravity="center"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:padding="9dp"
+            android:text=""
+            android:drawableTint="@color/patient_text_secondary" />
+
+        <Button
+            android:id="@+id/btn_emergency"
+            android:layout_width="@dimen/patient_action_button_size"
+            android:layout_height="@dimen/patient_action_button_size"
+            android:background="@drawable/bg_patient_circle_emergency"
+            android:contentDescription="Disparar emergência"
+            android:drawableTop="@drawable/ic_emergency"
+            android:gravity="center"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:padding="9dp"
+            android:text=""
+            android:drawableTint="@color/patient_text_primary" />
     </LinearLayout>
 
-    <Button
-        android:id="@+id/btn_calibrar"
-        android:clickable="true"
-        android:focusable="true"
-        android:layout_width="wrap_content"
-        android:layout_height="@dimen/patient_control_height"
-        android:layout_marginTop="@dimen/patient_recalibrate_margin_top"
-        android:background="@drawable/bg_patient_secondary_button"
-        android:gravity="center"
-        android:insetTop="0dp"
-        android:insetBottom="0dp"
-        android:minHeight="48dp"
-        android:minWidth="48dp"
-        android:paddingStart="@dimen/patient_secondary_button_padding"
-        android:paddingEnd="@dimen/patient_secondary_button_padding"
-        android:paddingTop="0dp"
-        android:paddingBottom="0dp"
-        android:text="@string/patient_recalibrate"
-        android:textAllCaps="false"
-        android:textColor="@color/patient_text_secondary"
-        android:textSize="@dimen/patient_secondary_button_text_size"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/card_vinculo" />
-
-    <!-- IDs preservados para a lógica existente e para o modo debug. -->
+    <!-- IDs preservados para a lógica existente. -->
     <TextView
         android:id="@+id/tv_limites"
         android:layout_width="1dp"
         android:layout_height="1dp"
         android:visibility="gone" />
-
-    <Button
-        android:id="@+id/btn_debug_geo"
-        android:layout_width="1dp"
-        android:layout_height="1dp"
-        android:visibility="gone" />
-
-    <Button
-        android:id="@+id/btn_emergency"
-        android:clickable="true"
-        android:focusable="true"
-        android:layout_width="0dp"
-        android:layout_height="@dimen/patient_control_height"
-        android:layout_marginTop="@dimen/patient_emergency_margin_top"
-        android:layout_marginBottom="@dimen/patient_emergency_margin_bottom"
-        android:background="@drawable/bg_patient_emergency_button"
-        android:fontFamily="sans"
-        android:insetTop="0dp"
-        android:insetBottom="0dp"
-        android:padding="0dp"
-        android:minHeight="48dp"
-        android:minWidth="48dp"
-        android:text="@string/patient_emergency"
-        android:textColor="@color/patient_text_primary"
-        android:textSize="@dimen/patient_emergency_text_size"
-        android:textStyle="bold"
-        app:icon="@drawable/ic_emergency"
-        app:iconGravity="textStart"
-        app:iconPadding="@dimen/patient_emergency_icon_padding"
-        app:iconTint="@color/patient_text_primary"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/btn_calibrar" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

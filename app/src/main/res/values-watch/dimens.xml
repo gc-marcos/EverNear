@@ -119,4 +119,6 @@
     <dimen name="patient_emergency_margin_bottom">4dp</dimen>
     <dimen name="patient_emergency_text_size">10sp</dimen>
     <dimen name="patient_emergency_icon_padding">4dp</dimen>
+    <dimen name="patient_action_button_size">64dp</dimen>
+    <dimen name="patient_action_button_gap">4dp</dimen>
 </resources>
