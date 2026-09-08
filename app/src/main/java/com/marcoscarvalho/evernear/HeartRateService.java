@@ -241,6 +241,22 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
         agendarWatchdogExterno();
         registrarGpsReceiver();
         registrarScreenOffReceiver();
+
+        // CRÍTICO: startForeground() precisa rodar em até ~5s da chamada a
+        // startForegroundService(), independente de qual action chegou primeiro.
+        // O GeofenceReceiver chama startForegroundService() com ACTION_GEOFENCE_EXIT
+        // como PRIMEIRO Intent quando o processo estava morto — esse caminho no
+        // onStartCommand() retorna antes de chegar ao antigo startForeground() do
+        // fallback, e o Android derruba o processo por timeout
+        // (ForegroundServiceDidNotStartInTimeException).
+        startForeground(NOTIF_ID, buildNotification("Monitorando em segundo plano", "--"));
+
+        // CRÍTICO: carrega uidPaciente e cuidadoresVinculados assim que o serviço
+        // é criado, independente de qual action chegou primeiro. Sem isto, um evento
+        // de geofence (real ou debug) que chegue como PRIMEIRO Intent encontra
+        // uidPaciente == null e descarta o alerta silenciosamente
+        // (ver tratarSaidaGeofenceComLocalizacao).
+        carregarDadosPaciente();
     }
 
     @Override
@@ -292,8 +308,10 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
             }
         }
 
-        startForeground(NOTIF_ID, buildNotification("Monitorando em segundo plano", "--"));
-        carregarDadosPaciente();
+        // startForeground() e carregarDadosPaciente() agora rodam em onCreate(),
+        // garantindo execução independente de qual action chega primeiro ao
+        // onStartCommand(). Chamá-los aqui de novo duplicaria o snapshot listener
+        // do Firestore (pacienteDataListener) e poderia causar alertas repetidos.
         return START_STICKY;
     }
 
