@@ -2,92 +2,145 @@ package com.marcoscarvalho.evernear;
 
 import static org.junit.Assert.assertTrue;
 
+import android.content.Context;
 import android.content.Intent;
 import android.location.Location;
 
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
+import androidx.test.platform.app.InstrumentationRegistry;
 import androidx.test.rule.ServiceTestRule;
+import androidx.test.uiautomator.UiDevice;
 
 import com.google.android.gms.tasks.Tasks;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.QuerySnapshot;
 
+import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /**
- * Teste de ponta a ponta: "saída de zona segura → alerta gravado no Firestore".
+ * Teste de ponta a ponta: "saída de zona segura → perda de conexão → reconexão → alerta gravado no Firestore".
  * Cobre os Cenários 2, 3 e 4 do protocolo em uma única execução automatizada.
- *
- * ⚠️ PRÉ-REQUISITOS OBRIGATÓRIOS — leia o guia de uso antes de rodar:
- *  1. Firebase Local Emulator Suite rodando na sua máquina
- *     (comando: firebase emulators:start).
- *  2. Um usuário de teste "paciente" e um "cuidador" vinculado, já semeados
- *     no emulador (Auth + Firestore) — ver seção "Preparando o Emulator"
- *     no guia de uso.
- *  3. O emulador do Android/dispositivo precisa alcançar sua máquina:
- *     10.0.2.2 é o endereço padrão do host quando se usa o Emulador do
- *     Android Studio. Em dispositivo físico, troque pelo IP da sua máquina
- *     na mesma rede Wi-Fi.
- *
- * 🚫 NUNCA rode este teste apontando para o projeto Firebase de PRODUÇÃO.
- * Ele grava documentos reais em "alerts" e pode dar a falsa impressão de
- * que um alerta de emergência de verdade foi disparado.
  */
 @RunWith(AndroidJUnit4.class)
 public class HeartRateServiceGeofenceExitInstrumentedTest {
 
-    // Ajuste para o IP da sua máquina se estiver usando dispositivo físico
-    private static final String EMULATOR_HOST = "10.0.2.2";
+    private static final String EMULATOR_HOST = "192.168.17.198";
+    private static final String EMAIL_PACIENTE_TESTE = "margarete@gmail.com";
+    private static final String SENHA_PACIENTE_TESTE = "123456";
 
-    // Credenciais do usuário de teste semeado no Auth Emulator
-    private static final String EMAIL_PACIENTE_TESTE = "paciente.teste@evernear.dev";
-    private static final String SENHA_PACIENTE_TESTE = "senha123";
+    private static boolean isEmulatorInitialized = false;
+    private UiDevice device;
 
     @Rule
     public final ServiceTestRule serviceRule = new ServiceTestRule();
 
     @Before
-    public void apontarParaOEmulador() {
-        // Idempotente por padrão do SDK — chamar mais de uma vez lança erro,
-        // então isso só deve rodar uma vez por processo de teste.
-        FirebaseAuth.getInstance().useEmulator(EMULATOR_HOST, 9099);
-        FirebaseFirestore.getInstance().useEmulator(EMULATOR_HOST, 8080);
+    public void setUp() {
+        device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation());
+
+        // Garantia de inicialização única do emulador por processo
+        if (!isEmulatorInitialized) {
+            try {
+                FirebaseAuth.getInstance().useEmulator(EMULATOR_HOST, 9099);
+                FirebaseFirestore.getInstance().useEmulator(EMULATOR_HOST, 8080);
+                isEmulatorInitialized = true;
+            } catch (IllegalStateException e) {
+                isEmulatorInitialized = true;
+            }
+        }
     }
 
     @Test
-    public void saidaDeZonaSimuladaDeveGerarAlertaNoFirestore() throws Exception {
-        Tasks.await(
-                FirebaseAuth.getInstance().signInWithEmailAndPassword(
-                        EMAIL_PACIENTE_TESTE, SENHA_PACIENTE_TESTE),
-                10, TimeUnit.SECONDS);
+    public void saidaDeZonaComPerdaERestauraçãoDeConexaoDeveGravarAlerta() throws Exception {
+        // 1. Autenticação Síncrona no Auth Emulator
+        try {
+            Tasks.await(
+                    FirebaseAuth.getInstance().signInWithEmailAndPassword(
+                            EMAIL_PACIENTE_TESTE, SENHA_PACIENTE_TESTE),
+                    30, TimeUnit.SECONDS);
+        } catch (TimeoutException e) {
+            Assert.fail("A Task de autenticação estourou o tempo de resposta (Timeout).");
+        } catch (ExecutionException e) {
+            Assert.fail("A autenticação falhou durante a execução: " + e.getCause().getMessage());
+        }
 
+        // 2. Simulação de Perda de Conexão via ADB (Desativa Wi-Fi e Dados Móveis)
+        device.executeShellCommand("svc wifi disable");
+        device.executeShellCommand("svc data disable");
+        Thread.sleep(2000); // Aguarda a alteração do estado da rede no sistema
+
+        // 3. Preparação da localização simulada (Zona Externa)
         Location localizacaoSimulada = new Location("DEBUG");
-        localizacaoSimulada.setLatitude(-23.5505);
-        localizacaoSimulada.setLongitude(-46.6333);
+        localizacaoSimulada.setLatitude(-23.65376);
+        localizacaoSimulada.setLongitude(-46.45246);
 
-        Intent intent = new Intent(
-                ApplicationProvider.getApplicationContext(), HeartRateService.class);
+        Context appContext = ApplicationProvider.getApplicationContext();
+        Intent intent = new Intent(appContext, HeartRateService.class);
         intent.setAction(HeartRateService.ACTION_DEBUG_GEOFENCE_EXIT);
         intent.putExtra(HeartRateService.EXTRA_DEBUG_LOCATION, localizacaoSimulada);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
 
-        serviceRule.startService(intent);
+        // Disparo do serviço sem encerrar a aplicação
+        appContext.startService(intent);
 
-        // Dá tempo para o serviço processar e gravar no Firestore Emulator.
-        // Se o teste falhar por timing em máquinas mais lentas, aumente aqui.
-        Thread.sleep(4000);
+        // 4. Aguarda um período offline simulando a tentativa de envio sem rede
+        Thread.sleep(3000);
 
-        QuerySnapshot alertas = Tasks.await(
-                FirebaseFirestore.getInstance().collection("alerts").get(),
-                10, TimeUnit.SECONDS);
+        // 5. Restauração da Conexão via ADB
+        device.executeShellCommand("svc wifi enable");
+        device.executeShellCommand("svc data enable");
+        Thread.sleep(3000); // Aguarda o restabelecimento do canal de comunicação com o Firestore
 
-        assertTrue("Esperava ao menos um alerta gerado após a saída de zona simulada",
-                alertas.size() > 0);
+        // 6. Polling para verificar a persistência do alerta após o reestabelecimento da rede
+        boolean documentoEncontrado = false;
+        int tentativas = 0;
+        int maxTentativas = 15;
+
+        while (!documentoEncontrado && tentativas < maxTentativas) {
+            Thread.sleep(1000);
+            try {
+                QuerySnapshot alertas = Tasks.await(
+                        FirebaseFirestore.getInstance().collection("alerts").get(),
+                        5, TimeUnit.SECONDS);
+
+                if (alertas != null && !alertas.isEmpty()) {
+                    documentoEncontrado = true;
+                }
+            } catch (Exception e) {
+                // Erro esperado caso o Firestore ainda esteja reestabelecendo o socket de conexão
+            }
+            tentativas++;
+        }
+
+        // 7. Validação final
+        assertTrue("Esperava ao menos um alerta no Firestore após a reconexão da rede", documentoEncontrado);
+    }
+
+    @After
+    public void tearDown() {
+        try {
+            // Garante a reativação da rede em caso de falhas para não afetar outros testes
+            if (device != null) {
+                device.executeShellCommand("svc wifi enable");
+                device.executeShellCommand("svc data enable");
+            }
+
+            Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+            context.stopService(new Intent(context, HeartRateService.class));
+            FirebaseAuth.getInstance().signOut();
+        } catch (Exception e) {
+            // Ignora falhas na limpeza do estado
+        }
     }
 }
