@@ -24,16 +24,7 @@ import androidx.core.app.ActivityCompat;
 
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationServices;
-import com.google.android.gms.maps.CameraUpdateFactory;
-import com.google.android.gms.maps.GoogleMap;
-import com.google.android.gms.maps.OnMapReadyCallback;
-import com.google.android.gms.maps.SupportMapFragment;
-import com.google.android.gms.maps.model.BitmapDescriptorFactory;
-import com.google.android.gms.maps.model.Circle;
-import com.google.android.gms.maps.model.CircleOptions;
 import com.google.android.gms.maps.model.LatLng;
-import com.google.android.gms.maps.model.Marker;
-import com.google.android.gms.maps.model.MarkerOptions;
 
 import com.google.firebase.firestore.FirebaseFirestore;
 
@@ -60,8 +51,7 @@ import java.util.Locale;
  * │  "SAIDA_ZONA" e o CaregiverAlertService notifica o cuidador.              │
  * └────────────────────────────────────────────────────────────────────────────┘
  */
-public class ConfigurarPontoReferenciaActivity extends AppCompatActivity
-        implements OnMapReadyCallback {
+public class ConfigurarPontoReferenciaActivity extends AppCompatActivity {
 
     private static final String TAG = "ConfigurarPontoRef";
 
@@ -89,11 +79,6 @@ public class ConfigurarPontoReferenciaActivity extends AppCompatActivity
     private Button[]  btnRaios;
     private Button    btnSalvar;
     private Button    btnRemover;
-
-    // ── Mapa ───────────────────────────────────────────────────────────────────
-    private GoogleMap googleMap;
-    private Marker    marcador;
-    private Circle    circulo;
 
     // ── Estado ────────────────────────────────────────────────────────────────
     private LatLng localSelecionado = null;
@@ -141,12 +126,6 @@ public class ConfigurarPontoReferenciaActivity extends AppCompatActivity
         configurarListeners();
         carregarZonaExistente();
 
-        // Inicializa o mapa
-        SupportMapFragment mapFragment =
-                (SupportMapFragment) getSupportFragmentManager().findFragmentById(R.id.map_fragment);
-        if (mapFragment != null) {
-            mapFragment.getMapAsync(this);
-        }
     }
 
     // ==================== Views ====================
@@ -202,39 +181,6 @@ public class ConfigurarPontoReferenciaActivity extends AppCompatActivity
         btnRemover.setOnClickListener(v -> confirmarRemocao());
     }
 
-    // ==================== Mapa ====================
-
-    @Override
-    public void onMapReady(@NonNull GoogleMap map) {
-        googleMap = map;
-
-        // Configurações visuais
-        googleMap.getUiSettings().setZoomControlsEnabled(true);
-        googleMap.getUiSettings().setCompassEnabled(true);
-        googleMap.getUiSettings().setMyLocationButtonEnabled(false); // usamos botão próprio
-
-        // Mapa usa o tema padrão (light) do Google Maps — sem estilos personalizados.
-
-        // Permissão de localização para o botão "Minha localização"
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
-                == PackageManager.PERMISSION_GRANTED) {
-            googleMap.setMyLocationEnabled(false); // controlamos via FusedLocation
-        }
-
-        // Toque no mapa define o local
-        googleMap.setOnMapClickListener(latLng -> {
-            selecionarLocal(latLng, "Local selecionado no mapa");
-        });
-
-        // Se já existe zona, centraliza o mapa nela; senão tenta localização atual
-        if (localSelecionado != null) {
-            googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(localSelecionado, 15f));
-            atualizarMarcadorECirculo();
-        } else {
-            centralizarNaLocalizacaoAtual();
-        }
-    }
-
     // ==================== Seleção de local ====================
 
     /**
@@ -252,40 +198,7 @@ public class ConfigurarPontoReferenciaActivity extends AppCompatActivity
                         descricao, latLng.latitude, latLng.longitude));
         tvLocalSelecionado.setTextColor(Color.WHITE);
 
-        atualizarMarcadorECirculo();
         atualizarBotaoSalvar();
-
-        // Anima câmera para o local selecionado
-        googleMap.animateCamera(CameraUpdateFactory.newLatLngZoom(latLng, 15f));
-    }
-
-    /**
-     * Atualiza o marcador e o círculo de zona no mapa conforme o estado atual
-     * ({@link #localSelecionado} e {@link #raioSelecionado}).
-     */
-    private void atualizarMarcadorECirculo() {
-        if (googleMap == null || localSelecionado == null) return;
-
-        // Remove marcador e círculo anteriores
-        if (marcador != null) marcador.remove();
-        if (circulo  != null) circulo.remove();
-
-        // Marcador vermelho no ponto de referência
-        marcador = googleMap.addMarker(new MarkerOptions()
-                .position(localSelecionado)
-                .title("Ponto de referência")
-                .snippet(nomePaciente)
-                .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE)));
-
-        // Círculo de zona segura (visível apenas se raio selecionado)
-        if (raioSelecionado > 0) {
-            circulo = googleMap.addCircle(new CircleOptions()
-                    .center(localSelecionado)
-                    .radius(raioSelecionado)
-                    .strokeColor(Color.parseColor("#1F6FEB"))
-                    .strokeWidth(3f)
-                    .fillColor(Color.parseColor("#331F6FEB")));
-        }
     }
 
     // ==================== Raio ====================
@@ -302,7 +215,6 @@ public class ConfigurarPontoReferenciaActivity extends AppCompatActivity
                                     : Color.parseColor("#21262D")));
         }
 
-        atualizarMarcadorECirculo();
         atualizarBotaoSalvar();
 
         Log.d(TAG, "Raio selecionado: " + raioMetros + " m");
@@ -423,19 +335,6 @@ public class ConfigurarPontoReferenciaActivity extends AppCompatActivity
                                 Toast.LENGTH_LONG).show());
     }
 
-    /** Centraliza o mapa na localização atual do cuidador (sem selecionar o local). */
-    private void centralizarNaLocalizacaoAtual() {
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
-                != PackageManager.PERMISSION_GRANTED) return;
-
-        fusedClient.getLastLocation().addOnSuccessListener(location -> {
-            if (location != null && googleMap != null) {
-                googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(
-                        new LatLng(location.getLatitude(), location.getLongitude()), 13f));
-            }
-        });
-    }
-
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
                                            @NonNull int[] grantResults) {
@@ -487,12 +386,6 @@ public class ConfigurarPontoReferenciaActivity extends AppCompatActivity
                                         lat, lng, (int) Math.round(radius)));
                         tvLocalSelecionado.setTextColor(Color.parseColor("#4CAF50"));
 
-                        // Atualiza mapa se já estiver pronto
-                        if (googleMap != null) {
-                            googleMap.moveCamera(
-                                    CameraUpdateFactory.newLatLngZoom(localSelecionado, 15f));
-                            atualizarMarcadorECirculo();
-                        }
                         atualizarBotaoSalvar();
                     });
 
@@ -546,6 +439,8 @@ public class ConfigurarPontoReferenciaActivity extends AppCompatActivity
                             btnSalvar.setText("Atualizar zona segura");
                             btnSalvar.setEnabled(true);
                             btnSalvar.setAlpha(1f);
+                            // Após configurar, retorna à lista de pacientes.
+                            finish();
                         });
                     }
 
@@ -586,10 +481,6 @@ public class ConfigurarPontoReferenciaActivity extends AppCompatActivity
                             zonaExistente        = false;
                             localSelecionado     = null;
                             raioSelecionado      = 0;
-
-                            // Limpa mapa
-                            if (marcador != null) { marcador.remove(); marcador = null; }
-                            if (circulo  != null) { circulo.remove();  circulo  = null; }
 
                             // Reseta UI
                             tvZonaAtiva.setVisibility(View.GONE);

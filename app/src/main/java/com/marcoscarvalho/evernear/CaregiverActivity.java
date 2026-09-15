@@ -134,6 +134,21 @@ public class CaregiverActivity extends AppCompatActivity {
                     startActivity(new Intent(this, DashboardCuidadorActivity.class)));
         }
 
+        View btnConfigPaciente = findViewById(R.id.btn_config_paciente);
+        if (btnConfigPaciente != null) {
+            btnConfigPaciente.setOnClickListener(v -> {
+                if (uidPacienteAtivo != null) {
+                    ConfigurarPontoReferenciaActivity.abrir(
+                            this,
+                            uidPacienteAtivo,
+                            tvPatientName != null ? tvPatientName.getText().toString() : "Paciente");
+                } else {
+                    Toast.makeText(this, "Selecione um paciente primeiro",
+                            Toast.LENGTH_SHORT).show();
+                }
+            });
+        }
+
         if (btnCall != null) btnCall.setOnClickListener(v -> ligarParaPaciente());
 
         View bottomMap = findViewById(R.id.bottom_map);

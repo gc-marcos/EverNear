@@ -2,136 +2,126 @@
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#0D1117"
+    android:background="@drawable/bg_caregiver_screen"
     android:fillViewport="true">
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="match_parent"
         android:orientation="vertical"
-        android:padding="24dp">
-
-        <!-- Boas-vindas -->
-        <TextView
-            android:id="@+id/tv_welcome_cuidador"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Olá, Cuidador"
-            android:textColor="#FFFFFF"
-            android:textSize="22sp"
-            android:textStyle="bold"
-            android:layout_marginTop="16dp" />
-
-        <!-- Apelido do cuidador -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Seu apelido"
-            android:textColor="#9AA4B2"
-            android:textSize="13sp"
-            android:layout_marginTop="20dp" />
+        android:paddingStart="20dp"
+        android:paddingTop="18dp"
+        android:paddingEnd="20dp"
+        android:paddingBottom="24dp">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginTop="6dp">
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
-            <EditText
-                android:id="@+id/et_apelido_cuidador"
+            <LinearLayout
                 android:layout_width="0dp"
-                android:layout_height="50dp"
+                android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:background="#161B22"
-                android:hint="Ex: Vovó, Pai, Enfermeiro João"
-                android:textColor="#FFFFFF"
-                android:textColorHint="#9AA4B2"
-                android:padding="12dp"
-                android:maxLines="1" />
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/tv_welcome_cuidador"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Meus Pacientes"
+                    android:textColor="@color/caregiver_text_primary"
+                    android:textSize="28sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
+                    android:text="Cuidador"
+                    android:textColor="@color/caregiver_text_secondary"
+                    android:textSize="13sp" />
+            </LinearLayout>
 
             <Button
-                android:id="@+id/btn_salvar_apelido"
-                android:layout_width="wrap_content"
-                android:layout_height="50dp"
-                android:text="Salvar"
-                android:backgroundTint="#1F6FEB"
-                android:textColor="#FFFFFF"
-                android:layout_marginStart="8dp" />
+                android:id="@+id/btn_vincular_paciente"
+                android:layout_width="52dp"
+                android:layout_height="52dp"
+                android:background="@drawable/bg_main_caregiver_icon"
+                android:contentDescription="Vincular paciente"
+                android:gravity="center"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:padding="0dp"
+                android:text="＋"
+                android:textColor="@color/main_caregiver_icon"
+                android:textSize="28sp"
+                android:textStyle="bold" />
         </LinearLayout>
 
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"
-            android:background="#21262D"
-            android:layout_marginTop="24dp" />
+            android:layout_marginTop="18dp"
+            android:background="#27234A" />
 
-        <!-- Vincular paciente -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Vincular Novo Paciente"
-            android:textColor="#FFFFFF"
-            android:textSize="18sp"
-            android:textStyle="bold"
-            android:layout_marginTop="24dp" />
-
-        <EditText
-            android:id="@+id/et_codigo_vincular"
-            android:layout_width="match_parent"
-            android:layout_height="50dp"
-            android:layout_marginTop="12dp"
-            android:background="#161B22"
-            android:hint="Digite o código de 6 dígitos"
-            android:textColor="#FFFFFF"
-            android:textColorHint="#9AA4B2"
-            android:padding="12dp"
-            android:maxLength="6"
-            android:inputType="textCapCharacters" />
-
-        <Button
-            android:id="@+id/btn_vincular_paciente"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Vincular Paciente"
-            android:layout_marginTop="12dp"
-            android:backgroundTint="#E10600" />
-
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="#21262D"
-            android:layout_marginTop="24dp" />
-
-        <!-- Lista de pacientes vinculados -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Pacientes Vinculados"
-            android:textColor="#FFFFFF"
-            android:textSize="18sp"
-            android:textStyle="bold"
-            android:layout_marginTop="24dp" />
-
-        <!-- Cards adicionados dinamicamente pelo Java -->
         <LinearLayout
             android:id="@+id/ll_lista_pacientes"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:layout_marginTop="12dp" />
+            android:layout_marginTop="18dp"
+            android:orientation="vertical" />
 
-        <!-- Exibido quando não há pacientes -->
-        <TextView
+        <LinearLayout
             android:id="@+id/tv_sem_pacientes"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Nenhum paciente vinculado ainda.\nDigite o código acima para vincular."
-            android:textColor="#9AA4B2"
-            android:textSize="14sp"
-            android:gravity="center"
-            android:layout_marginTop="16dp"
-            android:layout_marginBottom="32dp"
-            android:visibility="gone" />
+            android:layout_marginTop="100dp"
+            android:gravity="center_horizontal"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="96dp"
+                android:layout_height="96dp"
+                android:background="@drawable/bg_caregiver_pill"
+                android:gravity="center"
+                android:text="♧"
+                android:textColor="@color/caregiver_text_secondary"
+                android:textSize="42sp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:text="Nenhum paciente vinculado"
+                android:textColor="@color/caregiver_text_primary"
+                android:textSize="21sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="280dp"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:gravity="center"
+                android:text="Solicite o código ao paciente e vincule para começar a monitorar."
+                android:textColor="@color/caregiver_text_secondary"
+                android:textSize="14sp" />
+
+            <Button
+                android:id="@+id/btn_vincular_paciente_empty"
+                android:layout_width="match_parent"
+                android:layout_height="54dp"
+                android:layout_marginStart="44dp"
+                android:layout_marginTop="28dp"
+                android:layout_marginEnd="44dp"
+                android:background="@drawable/bg_caregiver_button_primary"
+                android:text="♧  Vincular Paciente"
+                android:textColor="@color/caregiver_text_primary"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+        </LinearLayout>
 
     </LinearLayout>
 </ScrollView>

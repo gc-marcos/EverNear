@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/fl_vincular_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_caregiver_screen">
+
+    <LinearLayout
+        android:id="@+id/ll_vincular_content"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btn_voltar_vincular"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="@android:color/transparent"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:padding="0dp"
+                android:text="‹"
+                android:textColor="@color/caregiver_text_primary"
+                android:textSize="34sp" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:text="Vincular Paciente"
+                android:textColor="@color/caregiver_text_primary"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <Space
+                android:layout_width="40dp"
+                android:layout_height="40dp" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="76dp"
+            android:layout_height="76dp"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="34dp"
+            android:background="@drawable/bg_main_caregiver_icon"
+            android:gravity="center"
+            android:text="↔"
+            android:textColor="@color/main_caregiver_icon"
+            android:textSize="34sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="24dp"
+            android:text="Código do Paciente"
+            android:textColor="@color/caregiver_text_primary"
+            android:textSize="22sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:gravity="center"
+            android:text="Solicite ao paciente o código de 6 caracteres gerado no app dele."
+            android:textColor="@color/caregiver_text_secondary"
+            android:textSize="13sp" />
+
+        <EditText
+            android:id="@+id/et_codigo_vincular"
+            android:layout_width="match_parent"
+            android:layout_height="58dp"
+            android:layout_marginTop="22dp"
+            android:background="@drawable/bg_caregiver_pill"
+            android:gravity="center"
+            android:hint="A B C 1 2 3"
+            android:inputType="textCapCharacters"
+            android:maxLength="6"
+            android:padding="12dp"
+            android:textColor="@color/caregiver_text_primary"
+            android:textColorHint="@color/caregiver_text_secondary"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.18" />
+
+        <TextView
+            android:id="@+id/tv_erro_codigo"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:background="#44202D"
+            android:padding="12dp"
+            android:text="●  Código inválido. Verifique e tente novamente."
+            android:textColor="#FF7188"
+            android:textSize="13sp"
+            android:visibility="gone" />
+
+        <Button
+            android:id="@+id/btn_vincular_codigo"
+            android:layout_width="match_parent"
+            android:layout_height="50dp"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/bg_caregiver_button_primary"
+            android:text="↔  VINCULAR"
+            android:textColor="@color/caregiver_text_primary"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:background="@drawable/bg_caregiver_pill"
+            android:padding="14dp"
+            android:text="ⓘ  Você pode monitorar até 3 pacientes.\n     Cada paciente também pode ter até 3 cuidadores."
+            android:textColor="@color/caregiver_text_secondary"
+            android:textSize="13sp" />
+    </LinearLayout>
+</FrameLayout>

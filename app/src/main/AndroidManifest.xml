@@ -161,6 +161,11 @@
             android:exported="false"
             android:theme="@style/Theme.AppCompat.DayNight.NoActionBar" />
 
+        <activity
+            android:name=".VincularPacienteActivity"
+            android:exported="false"
+            android:theme="@style/Theme.AppCompat.DayNight.NoActionBar" />
+
         <!--
             Serviço de monitoramento contínuo de batimentos cardíacos (PACIENTE — smartwatch).
             • foregroundServiceType="health" — identifica propósito para Android 14+ (API 34+)

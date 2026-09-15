@@ -62,7 +62,7 @@ public class HeartRateServiceGeofenceExitInstrumentedTest {
     }
 
     @Test
-    public void saidaDeZonaComPerdaERestauraçãoDeConexaoDeveGravarAlerta() throws Exception {
+    public void saidaDeZonaComPerdaERestauracaoDeConexaoDeveGravarAlerta() throws Exception {
         // 1. Autenticação Síncrona no Auth Emulator
         try {
             Tasks.await(
@@ -75,40 +75,51 @@ public class HeartRateServiceGeofenceExitInstrumentedTest {
             Assert.fail("A autenticação falhou durante a execução: " + e.getCause().getMessage());
         }
 
-        // 2. Simulação de Perda de Conexão via ADB (Desativa Wi-Fi e Dados Móveis)
+        Context appContext = ApplicationProvider.getApplicationContext();
+
+        // 2. Aquecimento: cria o serviço ANTES de qualquer evento de geofence,
+        // para que onCreate() dispare carregarDadosPaciente() e o listener
+        // assíncrono do Firestore tenha tempo de popular uidPaciente e
+        // cuidadoresVinculados. Sem isso, o evento de geofence chega antes
+        // dos dados existirem e é descartado silenciosamente
+        // (confirmado em log: listener responde ~1.5s após onCreate()).
+        Intent warmupIntent = new Intent(appContext, HeartRateService.class);
+        appContext.startService(warmupIntent);
+        Thread.sleep(3000); // aguarda addSnapshotListener responder
+
+        // 3. Simulação de Perda de Conexão via ADB (Desativa Wi-Fi e Dados Móveis)
         device.executeShellCommand("svc wifi disable");
         device.executeShellCommand("svc data disable");
-        Thread.sleep(2000); // Aguarda a alteração do estado da rede no sistema
+        Thread.sleep(3000); // Aguarda a alteração do estado da rede no sistema
 
-        // 3. Preparação da localização simulada (Zona Externa)
+        // 4. Preparação da localização simulada (Zona Externa)
         Location localizacaoSimulada = new Location("DEBUG");
         localizacaoSimulada.setLatitude(-23.65376);
         localizacaoSimulada.setLongitude(-46.45246);
 
-        Context appContext = ApplicationProvider.getApplicationContext();
         Intent intent = new Intent(appContext, HeartRateService.class);
         intent.setAction(HeartRateService.ACTION_DEBUG_GEOFENCE_EXIT);
         intent.putExtra(HeartRateService.EXTRA_DEBUG_LOCATION, localizacaoSimulada);
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
 
-        // Disparo do serviço sem encerrar a aplicação
+        // Disparo do evento de geofence, só depois dos dados já carregados
         appContext.startService(intent);
 
-        // 4. Aguarda um período offline simulando a tentativa de envio sem rede
+        // 5. Aguarda um período offline simulando a tentativa de envio sem rede
         Thread.sleep(3000);
 
-        // 5. Restauração da Conexão via ADB
+        // 6. Restauração da Conexão via ADB
         device.executeShellCommand("svc wifi enable");
         device.executeShellCommand("svc data enable");
         Thread.sleep(3000); // Aguarda o restabelecimento do canal de comunicação com o Firestore
 
-        // 6. Polling para verificar a persistência do alerta após o reestabelecimento da rede
+        // 7. Polling para verificar a persistência do alerta após o reestabelecimento da rede
         boolean documentoEncontrado = false;
         int tentativas = 0;
         int maxTentativas = 15;
 
         while (!documentoEncontrado && tentativas < maxTentativas) {
-            Thread.sleep(1000);
+            Thread.sleep(3000);
             try {
                 QuerySnapshot alertas = Tasks.await(
                         FirebaseFirestore.getInstance().collection("alerts").get(),
@@ -123,7 +134,7 @@ public class HeartRateServiceGeofenceExitInstrumentedTest {
             tentativas++;
         }
 
-        // 7. Validação final
+        // 8. Validação final
         assertTrue("Esperava ao menos um alerta no Firestore após a reconexão da rede", documentoEncontrado);
     }
 
