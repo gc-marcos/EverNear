@@ -26,8 +26,8 @@
 
     <!-- Tela do Cuidador -->
     <color name="caregiver_text_primary">#FFFFFF</color>
-    <color name="caregiver_text_secondary">#A4B0D6</color>
-    <color name="caregiver_alert_red">#FF4D6D</color>
+    <color name="caregiver_text_secondary">#8793AA</color>
+    <color name="caregiver_alert_red">#FF4962</color>
 
     <!-- Tela inicial / seleção de perfil -->
     <color name="main_bg">#0F172A</color>

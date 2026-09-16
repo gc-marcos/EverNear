@@ -192,9 +192,9 @@ public class LoginActivity extends AppCompatActivity {
                                     .addOnSuccessListener(doc -> {
                                         if (doc.exists()) {
                                             direcionarAposLogin(doc.getString(
-                                                    FirebaseHelper.Fields.TIPO));
+                                                    FirebaseHelper.Fields.TIPO), false);
                                         } else {
-                                            criarPerfilFirestore(user, "Usuário", null);
+                                            criarPerfilFirestore(user, "Usuário", null, true);
                                         }
                                     })
                                     .addOnFailureListener(e ->
@@ -273,7 +273,7 @@ public class LoginActivity extends AppCompatActivity {
                     if (task.isSuccessful()) {
                         FirebaseUser user = mAuth.getCurrentUser();
                         if (user != null) {
-                            criarPerfilFirestore(user, nome, telefoneFinal);
+                            criarPerfilFirestore(user, nome, telefoneFinal, true);
                         }
                     } else {
                         Log.w(TAG, "createUserWithEmail:failure", task.getException());
@@ -287,7 +287,8 @@ public class LoginActivity extends AppCompatActivity {
 
     // ==================== Salvar perfil ====================
 
-    private void criarPerfilFirestore(FirebaseUser firebaseUser, String nome, String telefone) {
+    private void criarPerfilFirestore(FirebaseUser firebaseUser, String nome, String telefone,
+                                      boolean primeiroAcesso) {
         if (firebaseUser == null || userType == null) return;
 
         FirebaseHelper.salvarUsuario(
@@ -299,7 +300,7 @@ public class LoginActivity extends AppCompatActivity {
                 new FirebaseHelper.Callback<String>() {
                     @Override
                     public void onResult(String codigoVinculo) {
-                        direcionarAposLogin(userType);
+                        direcionarAposLogin(userType, primeiroAcesso);
                     }
                     @Override
                     public void onError(Exception e) {
@@ -315,21 +316,26 @@ public class LoginActivity extends AppCompatActivity {
 
     /**
      * Após login/cadastro bem-sucedido, popula o cache local do BootReceiver e navega
-     * para SetupPermissoesActivity.
-     *
-     * O cache garante que o BootReceiver consiga iniciar o serviço correto mesmo offline
-     * (sem depender de uma consulta ao Firestore no momento do boot).
+     * para o setup somente no primeiro acesso. Em logins posteriores, abre diretamente
+     * a tela principal do perfil.
      */
-    private void direcionarAposLogin(String tipo) {
+    private void direcionarAposLogin(String tipo, boolean primeiroAcesso) {
         // Popula o cache local para que o BootReceiver funcione mesmo sem rede no boot
         BootReceiver.salvarTipoAposLogin(this, tipo);
 
-        Intent setup = new Intent(LoginActivity.this, SetupPermissoesActivity.class);
-        setup.putExtra("userType", tipo);
-        // FLAG_ACTIVITY_CLEAR_TASK: remove LoginActivity da pilha de navegação
-        // para que o botão Voltar não retorne à tela de login após o setup
-        setup.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-        startActivity(setup);
+        Intent destino;
+        if (primeiroAcesso) {
+            destino = new Intent(LoginActivity.this, SetupPermissoesActivity.class);
+            destino.putExtra("userType", tipo);
+        } else {
+            boolean ehPaciente = FirebaseHelper.isPaciente(tipo);
+            destino = new Intent(LoginActivity.this,
+                    ehPaciente ? PatientActivity.class : CaregiverActivity.class);
+        }
+
+        // Remove LoginActivity da pilha para que o botão Voltar não retorne à tela de login.
+        destino.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+        startActivity(destino);
         finish();
     }
 }

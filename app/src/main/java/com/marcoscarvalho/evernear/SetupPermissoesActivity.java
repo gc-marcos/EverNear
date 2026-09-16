@@ -381,7 +381,7 @@ public class SetupPermissoesActivity extends AppCompatActivity {
     private void navegarParaTelaPrincipal() {
         boolean ehPaciente = FirebaseHelper.isPaciente(userType);
         Intent intent = new Intent(this,
-                ehPaciente ? PatientActivity.class : CaregiverActivity.class);
+                ehPaciente ? PatientActivity.class : VincularPacienteActivity.class);
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
         startActivity(intent);
         finish();
