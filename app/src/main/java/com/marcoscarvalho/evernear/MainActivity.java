@@ -79,7 +79,7 @@ public class MainActivity extends AppCompatActivity {
                     if (FirebaseHelper.isPaciente(tipo)) {
                         startActivity(new Intent(MainActivity.this, PatientActivity.class));
                     } else if (FirebaseHelper.isCuidador(tipo)) {
-                        startActivity(new Intent(MainActivity.this, CaregiverActivity.class));
+                        startActivity(new Intent(MainActivity.this, DashboardCuidadorActivity.class));
                     } else {
                         return; // valor desconhecido — não redireciona
                     }

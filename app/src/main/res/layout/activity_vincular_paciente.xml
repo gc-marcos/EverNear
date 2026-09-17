@@ -18,17 +18,15 @@
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
-            <Button
+            <ImageView
                 android:id="@+id/btn_voltar_vincular"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:background="@android:color/transparent"
-                android:minWidth="0dp"
-                android:minHeight="0dp"
-                android:padding="0dp"
-                android:text="‹"
-                android:textColor="@color/caregiver_text_primary"
-                android:textSize="34sp" />
+                android:layout_width="@dimen/login_back_size"
+                android:layout_height="@dimen/login_back_size"
+                android:clickable="true"
+                android:contentDescription="@string/login_back_description"
+                android:focusable="true"
+                android:src="@drawable/ic_login_back"
+                android:tint="@color/caregiver_text_primary" />
 
             <TextView
                 android:layout_width="0dp"

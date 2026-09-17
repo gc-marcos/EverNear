@@ -186,13 +186,14 @@
         android:id="@+id/patient_stats"
         android:layout_width="0dp"
         android:layout_height="@dimen/patient_stats_height"
-        android:layout_marginTop="@dimen/patient_stats_margin_top"
+        android:layout_marginTop="40dp"
         android:background="@drawable/bg_patient_card"
         android:gravity="center"
         android:orientation="horizontal"
         android:paddingStart="@dimen/patient_stats_padding"
         android:paddingEnd="@dimen/patient_stats_padding"
         app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.0"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/tv_status">
 

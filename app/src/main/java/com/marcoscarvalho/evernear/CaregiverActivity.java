@@ -7,10 +7,7 @@ import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Bundle;
-import android.view.Gravity;
 import android.view.View;
-import android.widget.Button;
-import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -35,7 +32,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class CaregiverActivity extends AppCompatActivity {
 
@@ -61,7 +57,6 @@ public class CaregiverActivity extends AppCompatActivity {
     private View         vStatusDot;
     private View         btnCall;
     private TextView     tvLocationValue;
-    private LinearLayout llPacientesSecundarios;
 
     // ── Última localização recebida ────────────────────────────────────────────
     private Double lastLatitude  = null;
@@ -118,7 +113,6 @@ public class CaregiverActivity extends AppCompatActivity {
         vStatusDot             = findViewById(R.id.v_status_dot);
         btnCall                = findViewById(R.id.btn_call);
         tvLocationValue        = findViewById(R.id.tv_location_value);
-        llPacientesSecundarios = findViewById(R.id.ll_pacientes_secundarios);
 
         db          = FirebaseFirestore.getInstance();
         uidCuidador = FirebaseAuth.getInstance().getUid();
@@ -127,12 +121,6 @@ public class CaregiverActivity extends AppCompatActivity {
 
         View ivBack = findViewById(R.id.iv_back);
         if (ivBack != null) ivBack.setOnClickListener(v -> finish());
-
-        Button btnAddPaciente = findViewById(R.id.btn_add_paciente);
-        if (btnAddPaciente != null) {
-            btnAddPaciente.setOnClickListener(v ->
-                    startActivity(new Intent(this, DashboardCuidadorActivity.class)));
-        }
 
         View btnConfigPaciente = findViewById(R.id.btn_config_paciente);
         if (btnConfigPaciente != null) {
@@ -180,7 +168,6 @@ public class CaregiverActivity extends AppCompatActivity {
             uidPacienteAtivo    = novoPacienteId;
             uidPacienteDoAlerta = null;
             ouvirPaciente(novoPacienteId);
-            construirChips(todosUids);
         }
         // Se a lista ainda não carregou, uidPacienteDoAlerta é consumido em carregarDadosCuidador()
     }
@@ -228,8 +215,6 @@ public class CaregiverActivity extends AppCompatActivity {
                         uidPacienteAtivo = uids.get(0);
                         ouvirPaciente(uidPacienteAtivo);
                     }
-
-                    carregarNomesEConstruirChips(uids);
                 });
     }
 
@@ -244,7 +229,6 @@ public class CaregiverActivity extends AppCompatActivity {
         lastLatitude  = null;
         lastLongitude = null;
         if (tvLocationValue != null) tvLocationValue.setText("Aguardando localização...");
-        llPacientesSecundarios.removeAllViews();
         todosUids.clear();
         nomesPorUid.clear();
         uidPacienteAtivo = null;
@@ -252,128 +236,6 @@ public class CaregiverActivity extends AppCompatActivity {
             pacienteListener.remove();
             pacienteListener = null;
         }
-    }
-
-    /**
-     * Usa AtomicInteger no lugar do array int[] para evitar condição de corrida
-     * nos callbacks assíncronos paralelos do Firestore.
-     */
-    private void carregarNomesEConstruirChips(List<String> uids) {
-        AtomicInteger pendentes = new AtomicInteger(uids.size());
-
-        for (String uid : uids) {
-            if (nomesPorUid.containsKey(uid)) {
-                if (pendentes.decrementAndGet() == 0) construirChips(uids);
-                continue;
-            }
-            db.collection("users").document(uid).get()
-                    .addOnSuccessListener(doc -> {
-                        if (doc.exists()) {
-                            String apelido = doc.getString(FirebaseHelper.Fields.APELIDO);
-                            String nome    = doc.getString(FirebaseHelper.Fields.NOME);
-                            nomesPorUid.put(uid,
-                                    FirebaseHelper.nomeExibir(apelido, nome, "Paciente"));
-                        } else {
-                            nomesPorUid.put(uid, "Paciente");
-                        }
-                        if (pendentes.decrementAndGet() == 0) construirChips(uids);
-                    })
-                    .addOnFailureListener(ex -> {
-                        nomesPorUid.put(uid, "Paciente");
-                        if (pendentes.decrementAndGet() == 0) construirChips(uids);
-                    });
-        }
-    }
-
-    /**
-     * Atualiza apenas os chips que mudaram de estado (ativo/inativo)
-     * em vez de recriar todas as views — evita flickering visual.
-     */
-    private void construirChips(List<String> uids) {
-        // Tenta atualizar chips existentes antes de recriar tudo
-        if (llPacientesSecundarios.getChildCount() == uids.size()) {
-            for (int i = 0; i < llPacientesSecundarios.getChildCount(); i++) {
-                View item = llPacientesSecundarios.getChildAt(i);
-                String uidChip = (String) item.getTag();
-                if (uidChip == null) break; // lista mudou — recria tudo
-                atualizarEstadoChip(item, uidChip);
-            }
-            return;
-        }
-
-        // Recria do zero se a quantidade de pacientes mudou
-        llPacientesSecundarios.removeAllViews();
-
-        for (String uid : uids) {
-            String  nome  = nomesPorUid.getOrDefault(uid, "Paciente");
-            boolean ativo = uid.equals(uidPacienteAtivo);
-
-            LinearLayout item = new LinearLayout(this);
-            item.setOrientation(LinearLayout.VERTICAL);
-            item.setGravity(Gravity.CENTER_HORIZONTAL);
-            LinearLayout.LayoutParams itemParams = new LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT);
-            itemParams.setMargins(0, 0, 20, 0);
-            item.setLayoutParams(itemParams);
-            item.setTag(uid);
-
-            TextView avatar = new TextView(this);
-            LinearLayout.LayoutParams avParams = new LinearLayout.LayoutParams(52, 52);
-            avatar.setLayoutParams(avParams);
-            avatar.setGravity(Gravity.CENTER);
-            avatar.setTag("avatar"); // facilita busca em atualizarEstadoChip
-            avatar.setText(gerarIniciais(nome));
-            avatar.setTextColor(Color.WHITE);
-            avatar.setTextSize(14f);
-            avatar.setTypeface(null, android.graphics.Typeface.BOLD);
-
-            GradientDrawable shape = new GradientDrawable();
-            shape.setShape(GradientDrawable.OVAL);
-            shape.setColor(ativo ? Color.parseColor("#C0392B") : Color.parseColor("#2C3E50"));
-            avatar.setBackground(shape);
-
-            TextView tvNome = new TextView(this);
-            tvNome.setLayoutParams(new LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT));
-            tvNome.setTag("nome"); // facilita busca em atualizarEstadoChip
-            tvNome.setText(nome.length() > 10 ? nome.substring(0, 9) + "…" : nome);
-            tvNome.setTextColor(ativo ? Color.WHITE : Color.parseColor("#8899AA"));
-            tvNome.setTextSize(11f);
-            tvNome.setGravity(Gravity.CENTER);
-            tvNome.setPadding(0, 6, 0, 0);
-
-            item.addView(avatar);
-            item.addView(tvNome);
-
-            final String uidChip = uid;
-            item.setOnClickListener(v -> {
-                if (!uidChip.equals(uidPacienteAtivo)) {
-                    uidPacienteAtivo = uidChip;
-                    ouvirPaciente(uidChip);
-                    construirChips(todosUids);
-                }
-            });
-
-            llPacientesSecundarios.addView(item);
-        }
-    }
-
-    /** Atualiza cor e estado visual de um chip sem recriar a view. */
-    private void atualizarEstadoChip(View item, String uid) {
-        boolean ativo = uid.equals(uidPacienteAtivo);
-
-        TextView avatar = item.findViewWithTag("avatar");
-        TextView tvNome = item.findViewWithTag("nome");
-        if (avatar == null || tvNome == null) return;
-
-        GradientDrawable shape = new GradientDrawable();
-        shape.setShape(GradientDrawable.OVAL);
-        shape.setColor(ativo ? Color.parseColor("#C0392B") : Color.parseColor("#2C3E50"));
-        avatar.setBackground(shape);
-
-        tvNome.setTextColor(ativo ? Color.WHITE : Color.parseColor("#8899AA"));
     }
 
     // ==================== Listener do paciente ativo ===========================
