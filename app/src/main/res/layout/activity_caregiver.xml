@@ -40,12 +40,13 @@
         android:id="@+id/card_alert"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
+        android:layout_marginTop="40dp"
         android:background="@drawable/bg_caregiver_card"
         android:padding="20dp"
         app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="1.0"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/iv_back"
-        android:layout_marginTop="24dp">
+        app:layout_constraintTop_toBottomOf="@id/iv_back">
 
         <FrameLayout
             android:id="@+id/avatar_container"
@@ -72,57 +73,57 @@
             android:id="@+id/tv_patient_name"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
             android:text="@string/caregiver_patient_name"
             android:textColor="@color/caregiver_text_primary"
             android:textSize="20sp"
             android:textStyle="bold"
             app:layout_constraintStart_toEndOf="@id/avatar_container"
-            app:layout_constraintTop_toTopOf="@id/avatar_container"
-            android:layout_marginStart="12dp" />
+            app:layout_constraintTop_toTopOf="@id/avatar_container" />
 
         <TextView
             android:id="@+id/tv_bpm_value"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_marginTop="4dp"
             android:text="@string/caregiver_bpm_value"
             android:textColor="@color/caregiver_alert_red"
             android:textSize="18sp"
             android:textStyle="bold"
             app:layout_constraintStart_toEndOf="@id/avatar_container"
-            app:layout_constraintTop_toBottomOf="@id/tv_patient_name"
-            android:layout_marginStart="12dp"
-            android:layout_marginTop="4dp" />
+            app:layout_constraintTop_toBottomOf="@id/tv_patient_name" />
 
         <TextView
             android:id="@+id/tv_bpm_timestamp"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
             android:text="--:--"
             android:textColor="@color/caregiver_text_secondary"
             android:textSize="12sp"
             app:layout_constraintBottom_toBottomOf="@id/tv_bpm_value"
             app:layout_constraintStart_toEndOf="@id/tv_bpm_value"
-            app:layout_constraintTop_toTopOf="@id/tv_bpm_value"
-            android:layout_marginStart="8dp" />
+            app:layout_constraintTop_toTopOf="@id/tv_bpm_value" />
 
         <!-- Status do monitoramento (ATIVO / PARADO / RECONECTANDO) -->
         <LinearLayout
             android:id="@+id/ll_status_monitoramento"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            app:layout_constraintStart_toEndOf="@id/avatar_container"
-            app:layout_constraintTop_toBottomOf="@id/tv_bpm_value"
             android:layout_marginStart="12dp"
-            android:layout_marginTop="6dp">
+            android:layout_marginTop="6dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            app:layout_constraintStart_toEndOf="@id/avatar_container"
+            app:layout_constraintTop_toBottomOf="@id/tv_bpm_value">
 
             <View
                 android:id="@+id/v_status_dot"
                 android:layout_width="8dp"
                 android:layout_height="8dp"
-                android:background="@drawable/bg_status_dot"
-                android:layout_marginEnd="6dp" />
+                android:layout_marginEnd="6dp"
+                android:background="@drawable/bg_status_dot" />
 
             <TextView
                 android:id="@+id/tv_status_monitoramento"
@@ -137,25 +138,25 @@
             android:id="@+id/tv_alert_message"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
             android:text="@string/caregiver_alert_message"
             android:textColor="@color/caregiver_text_secondary"
             android:textSize="14sp"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/ll_status_monitoramento"
             app:layout_constraintEnd_toEndOf="parent"
-            android:layout_marginTop="16dp" />
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/ll_status_monitoramento" />
 
         <LinearLayout
             android:id="@+id/location_container"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
             android:background="@drawable/bg_caregiver_pill"
             android:orientation="vertical"
             android:padding="12dp"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/tv_alert_message"
             app:layout_constraintEnd_toEndOf="parent"
-            android:layout_marginTop="16dp">
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/tv_alert_message">
 
             <TextView
                 android:id="@+id/tv_location_label"
@@ -180,11 +181,11 @@
             android:id="@+id/actions_container"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
             android:orientation="horizontal"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/location_container"
             app:layout_constraintEnd_toEndOf="parent"
-            android:layout_marginTop="16dp">
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/location_container">
 
             <Button
                 android:id="@+id/btn_call"
@@ -195,6 +196,7 @@
                 android:textColor="@color/caregiver_text_primary"
                 android:textStyle="bold" />
         </LinearLayout>
+
         <LinearLayout
             android:id="@+id/bottom_map"
             android:layout_width="0dp"

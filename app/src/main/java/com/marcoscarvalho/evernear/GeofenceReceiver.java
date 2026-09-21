@@ -11,13 +11,13 @@ import com.google.android.gms.location.Geofence;
 import com.google.android.gms.location.GeofencingEvent;
 
 /**
- * Receptor de eventos de Geofence — dispara quando o paciente sai da zona segura.
+ * Receptor de eventos de Geofence — trata saída e entrada na zona segura.
  *
  * O Android entrega eventos de geofence via PendingIntent mesmo com o processo morto.
  * Este receptor:
- *  1. Valida o evento (sem erro, transição de saída).
- *  2. Inicia (ou acorda) o {@link HeartRateService} com {@code ACTION_GEOFENCE_EXIT}.
- *  3. O serviço obtém a localização e dispara o alerta para o cuidador.
+ *  1. Valida o evento (sem erro, transição de entrada ou saída).
+ *  2. Inicia (ou acorda) o {@link HeartRateService} com a ação correspondente.
+ *  3. O serviço controla o alerta, a atualização periódica e a confirmação de retorno.
  *
  * ┌─ Por que BroadcastReceiver? ───────────────────────────────────────────────┐
  * │  A API de Geofence do Google Play Services exige um PendingIntent de       │
@@ -44,14 +44,17 @@ public class GeofenceReceiver extends BroadcastReceiver {
 
         int transicao = event.getGeofenceTransition();
 
+        Intent serviceIntent = new Intent(context, HeartRateService.class);
         if (transicao == Geofence.GEOFENCE_TRANSITION_EXIT) {
             Log.w(TAG, "Saída da zona segura detectada — iniciando HeartRateService");
-
-            Intent serviceIntent = new Intent(context, HeartRateService.class);
             serviceIntent.setAction(HeartRateService.ACTION_GEOFENCE_EXIT);
-            ContextCompat.startForegroundService(context, serviceIntent);
+        } else if (transicao == Geofence.GEOFENCE_TRANSITION_ENTER) {
+            Log.i(TAG, "Entrada na zona segura detectada — iniciando HeartRateService");
+            serviceIntent.setAction(HeartRateService.ACTION_GEOFENCE_ENTER);
         } else {
             Log.d(TAG, "Transição de geofence ignorada: " + transicao);
+            return;
         }
+        ContextCompat.startForegroundService(context, serviceIntent);
     }
 }

@@ -147,6 +147,43 @@ public final class LocationHelper {
         }
     }
 
+    /**
+     * Obtém uma localização atual para anexar a um alerta.
+     *
+     * Tenta primeiro o provedor de alta precisão; se o pedido falhar, usa a
+     * última localização conhecida como fallback. O callback recebe null quando
+     * não há permissão ou nenhuma posição está disponível.
+     */
+    public static void obterLocalizacaoAtual(Context context,
+                                             FirebaseHelper.Callback<Location> callback) {
+        if (callback == null) return;
+        if (!temPermissao(context)) {
+            Log.w(TAG, "obterLocalizacaoAtual: ACCESS_FINE_LOCATION negada");
+            callback.onResult(null);
+            return;
+        }
+
+        try {
+            LocationServices.getFusedLocationProviderClient(context)
+                    .getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
+                    .addOnSuccessListener(loc -> {
+                        if (loc != null) {
+                            callback.onResult(loc);
+                        } else {
+                            obterUltimaLocalizacaoRapida(context, callback);
+                        }
+                    })
+                    .addOnFailureListener(error -> {
+                        Log.w(TAG, "getCurrentLocation() falhou: " + error.getMessage());
+                        obterUltimaLocalizacaoRapida(context, callback);
+                    });
+        } catch (SecurityException error) {
+            Log.e(TAG, "SecurityException em obterLocalizacaoAtual: "
+                    + error.getMessage());
+            callback.onResult(null);
+        }
+    }
+
     // ==================== Localização única (emergência) ====================
 
     /**
@@ -311,6 +348,7 @@ public final class LocationHelper {
      * parâmetros atualizados pelo cuidador entrem em vigor imediatamente.
      *
      * {@code GEOFENCE_TRANSITION_EXIT}: dispara quando o dispositivo SAI do raio.
+     * {@code GEOFENCE_TRANSITION_ENTER}: dispara quando o dispositivo RETORNA ao raio.
      * {@code setNotificationResponsiveness(60_000)}: aguarda 60 s antes de disparar —
      *   reduz falsos positivos por oscilações momentâneas do GPS.
      *
@@ -337,7 +375,8 @@ public final class LocationHelper {
                 .setRequestId(GEOFENCE_ID)
                 .setCircularRegion(latitude, longitude, raio)
                 .setExpirationDuration(Geofence.NEVER_EXPIRE)
-                .setTransitionTypes(Geofence.GEOFENCE_TRANSITION_EXIT)
+                .setTransitionTypes(Geofence.GEOFENCE_TRANSITION_EXIT
+                        | Geofence.GEOFENCE_TRANSITION_ENTER)
                 // 60 s de janela: elimina falsos positivos por sinal instável
                 .setNotificationResponsiveness(60_000)
                 .build();

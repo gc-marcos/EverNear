@@ -360,9 +360,16 @@ public class CaregiverActivity extends AppCompatActivity {
                                 FirebaseHelper.Fields.BPM);
                         String tipo         = dc.getDocument().getString(
                                 FirebaseHelper.Fields.TIPO_ALERTA);
+                        Double latitude     = dc.getDocument().getDouble(
+                                FirebaseHelper.Fields.LATITUDE);
+                        Double longitude    = dc.getDocument().getDouble(
+                                FirebaseHelper.Fields.LONGITUDE);
+                        Double accuracy     = dc.getDocument().getDouble(
+                                FirebaseHelper.Fields.ACCURACY);
 
                         exibirAlertaDialog(alertaId, nomePaciente,
-                                bpm != null ? bpm.intValue() : 0, tipo);
+                                bpm != null ? bpm.intValue() : 0, tipo,
+                                latitude, longitude, accuracy);
                     }
                 });
     }
@@ -371,7 +378,8 @@ public class CaregiverActivity extends AppCompatActivity {
      * Verifica se a Activity ainda está ativa antes de exibir o dialog.
      * Evita crash quando o callback do Firestore chega após o usuário sair da tela.
      */
-    private void exibirAlertaDialog(String alertaId, String paciente, int bpm, String tipo) {
+    private void exibirAlertaDialog(String alertaId, String paciente, int bpm, String tipo,
+                                    Double latitude, Double longitude, Double accuracy) {
         if (isFinishing() || isDestroyed()) return;
 
         String titulo;
@@ -379,10 +387,29 @@ public class CaregiverActivity extends AppCompatActivity {
         else if ("HIGH".equals(tipo))    titulo = "❤ Frequência ALTA";
         else if ("LOW".equals(tipo))     titulo = "💙 Frequência BAIXA";
         else if ("SAIDA_ZONA".equals(tipo)) titulo = "📍 Saída da área segura";
+        else if ("RETORNO_ZONA".equals(tipo)) titulo = "✅ Retorno à área segura";
         else                             titulo = "⚠ Alerta";
 
-        String msg = (paciente != null ? paciente : "Paciente")
-                + "\n\nBPM: " + bpm + "\nTipo: " + tipo;
+        String localizacao = latitude != null && longitude != null
+                ? String.format(Locale.US, "%.5f, %.5f", latitude, longitude)
+                  + (accuracy != null
+                     ? " (precisão ±" + Math.round(accuracy) + " m)" : "")
+                : "Indisponível";
+        String msg;
+        if ("SAIDA_ZONA".equals(tipo)) {
+            msg = (paciente != null ? paciente : "Paciente")
+                    + "\n\nO paciente saiu da zona segura."
+                    + "\nLocalização atual: " + localizacao;
+        } else if ("RETORNO_ZONA".equals(tipo)) {
+            msg = (paciente != null ? paciente : "Paciente")
+                    + "\n\nO paciente retornou e permaneceu na zona segura por mais de 1 minuto."
+                    + "\nLocalização atual: " + localizacao;
+        } else {
+            msg = (paciente != null ? paciente : "Paciente")
+                    + "\n\nBPM: " + bpm
+                    + "\nTipo: " + tipo
+                    + "\nLocalização atual: " + localizacao;
+        }
 
         AlertDialog.Builder builder = new AlertDialog.Builder(this)
                 .setTitle(titulo)

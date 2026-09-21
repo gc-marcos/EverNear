@@ -451,7 +451,7 @@ public class FirebaseHelper {
      * @param nomePaciente nome do paciente (desnormalizado para exibição rápida)
      * @param uidCuidador  UID do cuidador que receberá a notificação
      * @param bpm          BPM no momento da anomalia
-     * @param tipo         "HIGH", "LOW" ou "MANUAL"
+     * @param tipo         "HIGH", "LOW", "MANUAL", "SAIDA_ZONA" ou "RETORNO_ZONA"
      * @param prioridade   posição do cuidador na cadeia de escalada (0=primeiro)
      * @param bpmMin       limite mínimo configurado; -1 se desconhecido
      * @param bpmMax       limite máximo configurado; -1 se desconhecido

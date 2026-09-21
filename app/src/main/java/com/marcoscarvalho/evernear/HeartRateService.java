@@ -82,6 +82,14 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
     public static final String ACTION_ESCALAR       = "com.marcoscarvalho.evernear.ACTION_ESCALAR";
     /** Disparado pelo GeofenceReceiver quando o paciente sai da zona segura. */
     public static final String ACTION_GEOFENCE_EXIT = "com.marcoscarvalho.evernear.ACTION_GEOFENCE_EXIT";
+    /** Disparado pelo GeofenceReceiver quando o paciente entra na zona segura. */
+    public static final String ACTION_GEOFENCE_ENTER = "com.marcoscarvalho.evernear.ACTION_GEOFENCE_ENTER";
+    /** Disparado pelo AlarmManager para atualizar a localização enquanto fora da zona. */
+    private static final String ACTION_ATUALIZAR_LOCALIZACAO_ZONA =
+            "com.marcoscarvalho.evernear.ACTION_ATUALIZAR_LOCALIZACAO_ZONA";
+    /** Disparado pelo AlarmManager para confirmar retorno após permanência de 1 minuto. */
+    private static final String ACTION_CONFIRMAR_RETORNO_ZONA =
+            "com.marcoscarvalho.evernear.ACTION_CONFIRMAR_RETORNO_ZONA";
 
     /**
      * [DEBUG ONLY] Disparado pela DebugLocationActivity para simular saída da zona segura.
@@ -98,6 +106,8 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
     private static final String EXTRA_PROXIMO_INDICE = "proximoIndice";
     private static final String EXTRA_BPM            = "bpm";
     private static final String EXTRA_TIPO           = "tipo";
+    /** Localização do evento preservada para alertas escalados. */
+    private static final String EXTRA_LOCALIZACAO    = "localizacao";
 
     // ── Canais de notificação ─────────────────────────────────────────────────
     private static final String CHANNEL_ID   = "evernear_monitor";
@@ -118,6 +128,10 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
 
     // ── Escalada ──────────────────────────────────────────────────────────────
     private static final long ESCALADA_MS = 5 * 60 * 1000L;
+    /** Intervalo entre atualizações de localização enquanto o paciente está fora. */
+    private static final long ATUALIZACAO_ZONA_MS = 5 * 60 * 1000L;
+    /** Tempo mínimo dentro da zona antes do alerta de retorno. */
+    private static final long CONFIRMACAO_RETORNO_ZONA_MS = 60 * 1000L;
 
     // ── WakeLock ──────────────────────────────────────────────────────────────
     private static final String WAKELOCK_TAG        = "EverNear:HeartRateWakeLock";
@@ -155,6 +169,12 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
      * atualize o mesmo alarme em vez de criar múltiplos alarmes duplicados.
      */
     private static final int  WATCHDOG_EXTERNO_REQUEST_CODE = 100;
+    private static final int  ZONA_ATUALIZACAO_REQUEST_CODE = 300;
+    private static final int  ZONA_RETORNO_REQUEST_CODE = 301;
+
+    // ── Estado persistido da zona segura ───────────────────────────────────────
+    private static final String ZONA_PREFS = "evernear_zona_segura";
+    private static final String KEY_FORA_DA_ZONA = "fora_da_zona";
 
     // ── Throttle de atualizações ──────────────────────────────────────────────
     private static final long NOTIF_UPDATE_INTERVAL_MS     = 3_000L;
@@ -198,6 +218,16 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
     // Geofence — PendingIntent reutilizado para registro e remoção
     private PendingIntent geofencePendingIntent;
 
+    // Zona segura e acompanhamento após saída
+    private volatile boolean foraDaZona = false;
+    private volatile boolean retornoZonaPendente = false;
+    private volatile boolean zonaSeguraDisponivel = false;
+    private volatile double zonaSeguraLatitude;
+    private volatile double zonaSeguraLongitude;
+    private volatile float zonaSeguraRaio;
+    private boolean eventoSaidaZonaPendente = false;
+    private boolean eventoEntradaZonaPendente = false;
+
     // ── Watchdog do serviço — estado ──────────────────────────────────────────
     /** Timestamp da última leitura recebida via onHeartRate(). Atualizado em bgThread. */
     private volatile long lastHeartRateReceivedTime = System.currentTimeMillis();
@@ -228,6 +258,8 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
         super.onCreate();
         instance     = this;
         notifManager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+        foraDaZona   = getSharedPreferences(ZONA_PREFS, MODE_PRIVATE)
+                .getBoolean(KEY_FORA_DA_ZONA, false);
         criarCanalNotificacao();
 
         // Cria thread dedicada para as tarefas periódicas do serviço
@@ -280,6 +312,24 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
                 return START_STICKY;
             }
 
+            // Entrada na zona segura — inicia a confirmação de permanência por 1 min.
+            if (ACTION_GEOFENCE_ENTER.equals(action)) {
+                tratarEntradaGeofence();
+                return START_STICKY;
+            }
+
+            // Atualização periódica enquanto o paciente permanece fora da zona.
+            if (ACTION_ATUALIZAR_LOCALIZACAO_ZONA.equals(action)) {
+                atualizarLocalizacaoForaDaZona();
+                return START_STICKY;
+            }
+
+            // Confirma se o paciente permaneceu dentro por pelo menos 1 minuto.
+            if (ACTION_CONFIRMAR_RETORNO_ZONA.equals(action)) {
+                confirmarRetornoZona();
+                return START_STICKY;
+            }
+
             // [DEBUG ONLY] Saída simulada pela DebugLocationActivity
             // Só executa em builds de debug; ignorado silenciosamente em Release.
             if (BuildConfig.DEBUG && ACTION_DEBUG_GEOFENCE_EXIT.equals(action)) {
@@ -299,10 +349,11 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
                 int    proximoIndice = intent.getIntExtra(EXTRA_PROXIMO_INDICE, 0);
                 int    bpm           = intent.getIntExtra(EXTRA_BPM, 0);
                 String tipo          = intent.getStringExtra(EXTRA_TIPO);
+                Location localizacao = intent.getParcelableExtra(EXTRA_LOCALIZACAO);
                 if (alertaId != null && tipo != null) {
                     Log.d(TAG, "ACTION_ESCALAR recebido: alerta=" + alertaId
                             + " próximo=" + proximoIndice);
-                    verificarEEscalar(alertaId, proximoIndice, bpm, tipo);
+                    verificarEEscalar(alertaId, proximoIndice, bpm, tipo, localizacao);
                 }
                 return START_STICKY;
             }
@@ -605,6 +656,13 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
 
                         if (safeZoneLat != null && safeZoneLng != null
                                 && safeZoneRadius != null && safeZoneRadius > 0) {
+                            zonaSeguraLatitude  = safeZoneLat;
+                            zonaSeguraLongitude = safeZoneLng;
+                            zonaSeguraRaio      = Math.max(
+                                    safeZoneRadius.floatValue(),
+                                    LocationHelper.GEOFENCE_RAIO_MINIMO_M);
+                            zonaSeguraDisponivel = true;
+
                             LocationHelper.registrarGeofence(
                                     HeartRateService.this,
                                     safeZoneLat, safeZoneLng,
@@ -612,10 +670,23 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
                                     obterGeofencePendingIntent());
                         } else {
                             // Cuidador removeu (ou ainda não configurou) a zona segura
+                            zonaSeguraDisponivel = false;
+                            cancelarAcompanhamentoZona();
                             LocationHelper.removerGeofence(HeartRateService.this);
                         }
                     }
                     if (!monitorIniciado) { monitorIniciado = true; iniciarMonitor(); }
+
+                    // Eventos de geofence podem chegar antes do snapshot do paciente
+                    // terminar de carregar após o processo ser acordado pelo sistema.
+                    if (eventoSaidaZonaPendente) {
+                        eventoSaidaZonaPendente = false;
+                        tratarSaidaGeofenceComLocalizacao(null);
+                    }
+                    if (eventoEntradaZonaPendente) {
+                        eventoEntradaZonaPendente = false;
+                        tratarEntradaGeofence();
+                    }
                 });
     }
 
@@ -639,6 +710,7 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
         if (uidPaciente != null) {
             FirebaseHelper.salvarStatusMonitoramento(uidPaciente, "PARADO");
         }
+        cancelarAcompanhamentoZona();
         LocationHelper.removerGeofence(this);
         if (monitor != null) monitor.parar();
         stopForeground(true);
@@ -877,7 +949,7 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
         // Spec: "alerta cardíaco deve incluir obrigatoriamente a localização atual do paciente".
         // Salva também no documento do paciente (para a tela de monitoramento do cuidador).
         final String tipoStr = tipo.name();
-        LocationHelper.obterUltimaLocalizacaoRapida(this, new FirebaseHelper.Callback<Location>() {
+        LocationHelper.obterLocalizacaoAtual(this, new FirebaseHelper.Callback<Location>() {
             @Override
             public void onResult(Location loc) {
                 if (loc != null && uidPaciente != null) {
@@ -992,8 +1064,7 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
      * por aqui — garantindo zero duplicação de lógica conforme os requisitos.</p>
      *
      * <p><b>Produção</b> ({@code locationOverride == null}):
-     * Obtém a última localização do cache do FusedLocation e usa como posição
-     * atual para o alerta.</p>
+     * Obtém a localização atual do FusedLocation, usando o cache como fallback.</p>
      *
      * <p><b>Debug</b> ({@code locationOverride != null}):
      * Usa a localização simulada diretamente, sem chamar nenhuma API de GPS.
@@ -1006,8 +1077,30 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
         Log.w(TAG, "Saída da zona segura ["
                 + (locationOverride != null ? "DEBUG" : "GPS") + "] — enviando alerta");
 
-        if (uidPaciente == null || cuidadoresVinculados.isEmpty()) {
-            Log.w(TAG, "Saída da zona segura: dados do paciente ausentes — alerta omitido");
+        if (uidPaciente == null) {
+            // O serviço pode ser acordado pelo GeofenceReceiver antes do snapshot
+            // do paciente terminar de restaurar após o processo ser encerrado.
+            eventoSaidaZonaPendente = true;
+            Log.w(TAG, "Saída da zona segura aguardando dados do paciente");
+            return;
+        }
+        if (cuidadoresVinculados.isEmpty()) {
+            Log.w(TAG, "Saída da zona segura: nenhum cuidador vinculado");
+            return;
+        }
+
+        boolean jaEstavaFora = foraDaZona;
+        foraDaZona = true;
+        retornoZonaPendente = false;
+        persistirEstadoZona();
+        cancelarConfirmacaoRetornoZona();
+        agendarAtualizacaoZona();
+
+        // O Android pode entregar mais de um EXIT durante oscilações do GPS.
+        // Apenas a primeira saída gera o alerta inicial; as demais mantêm o
+        // acompanhamento periódico ativo.
+        if (jaEstavaFora) {
+            Log.d(TAG, "Saída repetida da zona segura — mantendo acompanhamento");
             return;
         }
 
@@ -1017,8 +1110,8 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
             // bpm=0 pois frequência cardíaca não é relevante para alertas de geofence
             enviarAlertaParaCuidador(0, 0, "SAIDA_ZONA", locationOverride);
         } else {
-            // ── Caminho PRODUÇÃO: obter última localização do cache do GPS ───────
-            LocationHelper.obterUltimaLocalizacaoRapida(this, new FirebaseHelper.Callback<Location>() {
+            // ── Caminho PRODUÇÃO: obter a localização atual, com fallback ao cache ─
+            LocationHelper.obterLocalizacaoAtual(this, new FirebaseHelper.Callback<Location>() {
                 @Override
                 public void onResult(Location loc) {
                     if (loc != null) {
@@ -1035,6 +1128,187 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
                 }
             });
         }
+    }
+
+    /**
+     * Recebe a entrada no geofence. O alerta de retorno só é emitido depois que
+     * uma nova leitura confirmar que o paciente permaneceu dentro por 1 minuto.
+     */
+    private void tratarEntradaGeofence() {
+        if (uidPaciente == null) {
+            eventoEntradaZonaPendente = true;
+            Log.w(TAG, "Entrada na zona segura aguardando dados do paciente");
+            return;
+        }
+        if (!foraDaZona) {
+            Log.d(TAG, "Entrada na zona segura ignorada: paciente já estava dentro");
+            return;
+        }
+
+        retornoZonaPendente = true;
+        cancelarAtualizacaoZona();
+        agendarConfirmacaoRetornoZona();
+        Log.i(TAG, "Entrada na zona segura detectada — confirmando permanência por 1 min");
+    }
+
+    /**
+     * Atualiza a localização do paciente no perfil a cada 5 minutos enquanto ele
+     * permanece fora da zona. O CaregiverActivity já observa esse documento em
+     * tempo real e atualiza a posição exibida ao cuidador.
+     */
+    private void atualizarLocalizacaoForaDaZona() {
+        if (!foraDaZona || retornoZonaPendente) return;
+        if (uidPaciente == null) {
+            agendarAtualizacaoZona();
+            return;
+        }
+
+        LocationHelper.obterLocalizacaoAtual(this, new FirebaseHelper.Callback<Location>() {
+            @Override
+            public void onResult(Location loc) {
+                if (loc != null) {
+                    FirebaseHelper.salvarLocalizacaoEmergencia(uidPaciente, loc, null);
+                    Log.i(TAG, "Localização fora da zona atualizada: "
+                            + loc.getLatitude() + ", " + loc.getLongitude());
+                } else {
+                    Log.w(TAG, "Não foi possível atualizar localização fora da zona");
+                    LocationHelper.obterESalvarLocalizacao(
+                            HeartRateService.this, uidPaciente);
+                }
+                if (foraDaZona && !retornoZonaPendente) {
+                    agendarAtualizacaoZona();
+                }
+            }
+
+            @Override
+            public void onError(Exception e) {
+                Log.w(TAG, "Falha na atualização de localização fora da zona: "
+                        + e.getMessage());
+                if (foraDaZona && !retornoZonaPendente) {
+                    agendarAtualizacaoZona();
+                }
+            }
+        });
+    }
+
+    /**
+     * Confirma o retorno usando a posição atual, evitando emitir alerta se o
+     * evento ENTER tiver sido apenas uma oscilação temporária do GPS.
+     */
+    private void confirmarRetornoZona() {
+        if (!foraDaZona || !retornoZonaPendente) return;
+        if (!zonaSeguraDisponivel) {
+            agendarConfirmacaoRetornoZona();
+            return;
+        }
+
+        LocationHelper.obterLocalizacaoAtual(this, new FirebaseHelper.Callback<Location>() {
+            @Override
+            public void onResult(Location loc) {
+                if (!foraDaZona || !retornoZonaPendente) return;
+                if (loc == null) {
+                    Log.w(TAG, "Confirmação de retorno sem localização — tentando novamente");
+                    agendarConfirmacaoRetornoZona();
+                    return;
+                }
+
+                if (!estaDentroDaZona(loc)) {
+                    retornoZonaPendente = false;
+                    foraDaZona = true;
+                    persistirEstadoZona();
+                    agendarAtualizacaoZona();
+                    Log.w(TAG, "Paciente ainda fora da zona após 1 min — retorno não confirmado");
+                    return;
+                }
+
+                retornoZonaPendente = false;
+                foraDaZona = false;
+                persistirEstadoZona();
+                cancelarAtualizacaoZona();
+                FirebaseHelper.salvarLocalizacaoEmergencia(uidPaciente, loc, null);
+
+                // bpm=0: retorno de zona não é um evento cardíaco.
+                enviarAlertaParaCuidador(0, 0, "RETORNO_ZONA", loc);
+                Log.i(TAG, "Retorno à zona segura confirmado — alerta enviado");
+            }
+
+            @Override
+            public void onError(Exception e) {
+                Log.w(TAG, "Falha ao confirmar retorno à zona: " + e.getMessage());
+                agendarConfirmacaoRetornoZona();
+            }
+        });
+    }
+
+    private boolean estaDentroDaZona(Location location) {
+        if (!zonaSeguraDisponivel || location == null) return false;
+        float[] distancia = new float[1];
+        Location.distanceBetween(
+                location.getLatitude(), location.getLongitude(),
+                zonaSeguraLatitude, zonaSeguraLongitude,
+                distancia);
+        return distancia[0] <= zonaSeguraRaio;
+    }
+
+    private void persistirEstadoZona() {
+        getSharedPreferences(ZONA_PREFS, MODE_PRIVATE)
+                .edit()
+                .putBoolean(KEY_FORA_DA_ZONA, foraDaZona)
+                .apply();
+    }
+
+    private void agendarAtualizacaoZona() {
+        agendarAcaoZona(ACTION_ATUALIZAR_LOCALIZACAO_ZONA,
+                ZONA_ATUALIZACAO_REQUEST_CODE, ATUALIZACAO_ZONA_MS);
+    }
+
+    private void cancelarAtualizacaoZona() {
+        cancelarAcaoZona(ACTION_ATUALIZAR_LOCALIZACAO_ZONA,
+                ZONA_ATUALIZACAO_REQUEST_CODE);
+    }
+
+    private void agendarConfirmacaoRetornoZona() {
+        agendarAcaoZona(ACTION_CONFIRMAR_RETORNO_ZONA,
+                ZONA_RETORNO_REQUEST_CODE, CONFIRMACAO_RETORNO_ZONA_MS);
+    }
+
+    private void cancelarConfirmacaoRetornoZona() {
+        cancelarAcaoZona(ACTION_CONFIRMAR_RETORNO_ZONA,
+                ZONA_RETORNO_REQUEST_CODE);
+    }
+
+    private void cancelarAcompanhamentoZona() {
+        foraDaZona = false;
+        retornoZonaPendente = false;
+        persistirEstadoZona();
+        cancelarAtualizacaoZona();
+        cancelarConfirmacaoRetornoZona();
+    }
+
+    private void agendarAcaoZona(String action, int requestCode, long atrasoMs) {
+        Intent intent = new Intent(this, HeartRateService.class);
+        intent.setAction(action);
+        PendingIntent pi = PendingIntent.getService(
+                this, requestCode, intent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        AlarmManager am = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
+        if (am != null) {
+            am.setExactAndAllowWhileIdle(
+                    AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                    SystemClock.elapsedRealtime() + atrasoMs,
+                    pi);
+        }
+    }
+
+    private void cancelarAcaoZona(String action, int requestCode) {
+        Intent intent = new Intent(this, HeartRateService.class);
+        intent.setAction(action);
+        PendingIntent pi = PendingIntent.getService(
+                this, requestCode, intent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        AlarmManager am = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
+        if (am != null) am.cancel(pi);
+        pi.cancel();
     }
 
     // ==================== Escalada de alertas ====================
@@ -1067,7 +1341,7 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
         String uidCuidador = cuidadoresVinculados.get(indice);
         if (uidCuidador == null || uidCuidador.isEmpty() || uidCuidador.equals(uidPaciente)) {
             Log.e(TAG, "UID inválido no índice " + indice + " — pulando");
-            enviarAlertaParaCuidador(indice + 1, bpm, tipo, null);
+            enviarAlertaParaCuidador(indice + 1, bpm, tipo, location);
             return;
         }
 
@@ -1082,24 +1356,28 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
                     public void onResult(String alertaId) {
                         Log.d(TAG, "Alerta[" + indice + "] enviado: " + alertaId);
                         if (indice + 1 < cuidadoresVinculados.size()) {
-                            agendarEscalada(alertaId, indice + 1, bpm, tipo);
+                            agendarEscalada(alertaId, indice + 1, bpm, tipo, location);
                         }
                     }
                     @Override
                     public void onError(Exception e) {
                         Log.e(TAG, "Falha ao enviar alerta[" + indice + "]: " + e.getMessage());
-                        enviarAlertaParaCuidador(indice + 1, bpm, tipo, null);
+                        enviarAlertaParaCuidador(indice + 1, bpm, tipo, location);
                     }
                 });
     }
 
-    private void agendarEscalada(String alertaId, int proximoIndice, int bpm, String tipo) {
+    private void agendarEscalada(String alertaId, int proximoIndice, int bpm, String tipo,
+                                 @Nullable Location location) {
         Intent intent = new Intent(this, HeartRateService.class);
         intent.setAction(ACTION_ESCALAR);
         intent.putExtra(EXTRA_ALERTA_ID,      alertaId);
         intent.putExtra(EXTRA_PROXIMO_INDICE, proximoIndice);
         intent.putExtra(EXTRA_BPM,            bpm);
         intent.putExtra(EXTRA_TIPO,           tipo);
+        if (location != null) {
+            intent.putExtra(EXTRA_LOCALIZACAO, location);
+        }
 
         int requestCode = (alertaId + ":" + proximoIndice).hashCode();
         PendingIntent pi = PendingIntent.getService(
@@ -1116,7 +1394,8 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
         }
     }
 
-    private void verificarEEscalar(String alertaId, int proximoIndice, int bpm, String tipo) {
+    private void verificarEEscalar(String alertaId, int proximoIndice, int bpm, String tipo,
+                                   @Nullable Location location) {
         FirebaseHelper.alertaFoiConfirmado(alertaId, new FirebaseHelper.Callback<Boolean>() {
             @Override
             public void onResult(Boolean confirmado) {
@@ -1124,14 +1403,14 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
                     Log.d(TAG, "Alerta " + alertaId + " confirmado — escalada cancelada");
                 } else {
                     Log.d(TAG, "Alerta " + alertaId + " não confirmado → escalando");
-                    // Escalada não inclui nova localização — o alerta original já a continha
-                    enviarAlertaParaCuidador(proximoIndice, bpm, tipo, null);
+                    // Preserva a localização do evento original na escalada.
+                    enviarAlertaParaCuidador(proximoIndice, bpm, tipo, location);
                 }
             }
             @Override
             public void onError(Exception e) {
                 Log.w(TAG, "Erro ao verificar confirmação — escalando por precaução");
-                enviarAlertaParaCuidador(proximoIndice, bpm, tipo, null);
+                enviarAlertaParaCuidador(proximoIndice, bpm, tipo, location);
             }
         });
     }

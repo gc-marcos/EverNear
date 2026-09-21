@@ -32,6 +32,7 @@ import java.util.Date;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Serviço em primeiro plano no dispositivo do CUIDADOR (celular/tablet).
@@ -479,6 +480,9 @@ public class CaregiverAlertService extends Service {
         Long   bpmLong      = dc.getDocument().getLong("bpm");
         Long   bpmMinLong   = dc.getDocument().getLong("bpmMin");
         Long   bpmMaxLong   = dc.getDocument().getLong("bpmMax");
+        Double latitude     = dc.getDocument().getDouble("latitude");
+        Double longitude    = dc.getDocument().getDouble("longitude");
+        Double accuracy     = dc.getDocument().getDouble("accuracy");
 
         // Valores seguros com fallback para evitar NPE
         int    bpm         = bpmLong    != null ? bpmLong.intValue()    : 0;
@@ -494,10 +498,12 @@ public class CaregiverAlertService extends Service {
         if (bpmMinLong != null && bpmMaxLong != null) {
             // Limites disponíveis no documento — exibe notificação imediatamente
             exibirNotificacaoAlerta(alertaId, pacienteId, nomeSeguro,
-                    bpm, tipoSeguro, bpmMinLong.intValue(), bpmMaxLong.intValue());
+                    bpm, tipoSeguro, bpmMinLong.intValue(), bpmMaxLong.intValue(),
+                    latitude, longitude, accuracy);
         } else {
             // Tenta buscar os limites no perfil do paciente
-            buscarLimitesENotificar(alertaId, pacienteId, nomeSeguro, bpm, tipoSeguro);
+            buscarLimitesENotificar(alertaId, pacienteId, nomeSeguro, bpm, tipoSeguro,
+                    latitude, longitude, accuracy);
         }
     }
 
@@ -506,10 +512,12 @@ public class CaregiverAlertService extends Service {
      * Se não encontrar (ou ocorrer erro), exibe a notificação sem os limites.
      */
     private void buscarLimitesENotificar(String alertaId, String pacienteId,
-                                         String pacienteNome, int bpm, String tipo) {
+                                         String pacienteNome, int bpm, String tipo,
+                                         Double latitude, Double longitude, Double accuracy) {
         if (pacienteId == null || pacienteId.isEmpty()) {
             Log.w(TAG, "pacienteId nulo — exibindo notificação sem limites");
-            exibirNotificacaoAlerta(alertaId, pacienteId, pacienteNome, bpm, tipo, -1, -1);
+            exibirNotificacaoAlerta(alertaId, pacienteId, pacienteNome, bpm, tipo,
+                    -1, -1, latitude, longitude, accuracy);
             return;
         }
 
@@ -525,11 +533,13 @@ public class CaregiverAlertService extends Service {
                         if (minL != null) bpmMin = minL.intValue();
                         if (maxL != null) bpmMax = maxL.intValue();
                     }
-                    exibirNotificacaoAlerta(alertaId, pacienteId, pacienteNome, bpm, tipo, bpmMin, bpmMax);
+                    exibirNotificacaoAlerta(alertaId, pacienteId, pacienteNome, bpm, tipo,
+                            bpmMin, bpmMax, latitude, longitude, accuracy);
                 })
                 .addOnFailureListener(e -> {
                     Log.w(TAG, "Falha ao buscar limites do paciente: " + e.getMessage());
-                    exibirNotificacaoAlerta(alertaId, pacienteId, pacienteNome, bpm, tipo, -1, -1);
+                    exibirNotificacaoAlerta(alertaId, pacienteId, pacienteNome, bpm, tipo,
+                            -1, -1, latitude, longitude, accuracy);
                 });
     }
 
@@ -667,7 +677,7 @@ public class CaregiverAlertService extends Service {
      * Conteúdo exibido (BigTextStyle):
      *   Paciente: [nome]
      *   BPM Atual: [bpm]
-     *   Tipo: [HIGH | LOW | MANUAL]
+     *   Tipo: [HIGH | LOW | MANUAL | SAIDA_ZONA | RETORNO_ZONA]
      *   Limite mínimo: [bpmMin]
      *   Limite máximo: [bpmMax]
      *
@@ -675,21 +685,30 @@ public class CaregiverAlertService extends Service {
      * @param pacienteId  UID do paciente (passado no Intent para deep-link na CaregiverActivity)
      * @param pacienteNome Nome do paciente (já validado pelo chamador)
      * @param bpm         BPM no momento da anomalia
-     * @param tipo        "HIGH", "LOW" ou "MANUAL"
+     * @param tipo        "HIGH", "LOW", "MANUAL", "SAIDA_ZONA" ou "RETORNO_ZONA"
      * @param bpmMin      Limite mínimo configurado; -1 se desconhecido
      * @param bpmMax      Limite máximo configurado; -1 se desconhecido
      */
     private void exibirNotificacaoAlerta(String alertaId, String pacienteId,
                                          String pacienteNome, int bpm,
-                                         String tipo, int bpmMin, int bpmMax) {
+                                         String tipo, int bpmMin, int bpmMax,
+                                         Double latitude, Double longitude, Double accuracy) {
         boolean isEmergencia = "MANUAL".equals(tipo);
         boolean isHigh       = "HIGH".equals(tipo);
+        boolean isSaidaZona  = "SAIDA_ZONA".equals(tipo);
+        boolean isRetornoZona = "RETORNO_ZONA".equals(tipo);
 
         String titulo;
         String emoji;
         if (isEmergencia) {
             titulo = "EMERGÊNCIA acionada!";
             emoji  = "🚨";
+        } else if (isSaidaZona) {
+            titulo = "Saída da área segura";
+            emoji  = "📍";
+        } else if (isRetornoZona) {
+            titulo = "Retorno à área segura";
+            emoji  = "✅";
         } else if (isHigh) {
             titulo = "Frequência cardíaca ALTA";
             emoji  = "❤";
@@ -699,17 +718,41 @@ public class CaregiverAlertService extends Service {
         }
 
         // Linha resumida (aparece sem expandir a notificação)
-        String resumo = pacienteNome + " — " + bpm + " bpm";
+        String localizacao = latitude != null && longitude != null
+                ? String.format(Locale.US, "%.5f, %.5f", latitude, longitude)
+                  + (accuracy != null
+                     ? " (precisão ±" + Math.round(accuracy) + " m)" : "")
+                : "Indisponível";
+        String resumo = isSaidaZona
+                ? pacienteNome + " — saiu da zona segura"
+                : isRetornoZona
+                  ? pacienteNome + " — retornou à zona segura"
+                  : pacienteNome + " — " + bpm + " bpm";
 
         // Corpo expandido com todos os detalhes clínicos
         String minStr = bpmMin > 0 ? String.valueOf(bpmMin) : "N/A";
         String maxStr = bpmMax > 0 ? String.valueOf(bpmMax) : "N/A";
-        String detalhes = "Paciente: " + pacienteNome + "\n"
-                + "BPM Atual: " + bpm + "\n"
-                + "Tipo: " + tipo + "\n"
-                + "Limite mínimo: " + minStr + "\n"
-                + "Limite máximo: " + maxStr + "\n\n"
-                + "Toque para abrir o app e confirmar.";
+        String detalhes;
+        if (isSaidaZona) {
+            detalhes = "Paciente: " + pacienteNome + "\n"
+                    + "Evento: saída da zona segura\n"
+                    + "Localização atual: " + localizacao + "\n\n"
+                    + "Toque para abrir o app e confirmar.";
+        } else if (isRetornoZona) {
+            detalhes = "Paciente: " + pacienteNome + "\n"
+                    + "Evento: retorno à zona segura\n"
+                    + "Permaneceu dentro da zona por pelo menos 1 minuto\n"
+                    + "Localização atual: " + localizacao + "\n\n"
+                    + "Toque para abrir o app e confirmar.";
+        } else {
+            detalhes = "Paciente: " + pacienteNome + "\n"
+                    + "BPM Atual: " + bpm + "\n"
+                    + "Tipo: " + tipo + "\n"
+                    + "Limite mínimo: " + minStr + "\n"
+                    + "Limite máximo: " + maxStr + "\n"
+                    + "Localização atual: " + localizacao + "\n\n"
+                    + "Toque para abrir o app e confirmar.";
+        }
 
         // Intent com deep-link: abre CaregiverActivity diretamente na ficha do paciente
         Intent openApp = new Intent(this, CaregiverActivity.class);
