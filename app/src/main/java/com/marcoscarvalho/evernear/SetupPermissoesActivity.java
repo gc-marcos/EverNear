@@ -379,6 +379,10 @@ public class SetupPermissoesActivity extends AppCompatActivity {
     // ==================== Navegação final ==================================
 
     private void navegarParaTelaPrincipal() {
+        // O marcador é local à instalação. Após desinstalar e instalar
+        // novamente, ele não existe e o login volta a passar por este fluxo.
+        PermissaoHelper.marcarConfiguracaoConcluida(this);
+
         boolean ehPaciente = FirebaseHelper.isPaciente(userType);
         Intent intent = new Intent(this,
                 ehPaciente ? PatientActivity.class : VincularPacienteActivity.class);

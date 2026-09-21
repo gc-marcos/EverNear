@@ -1,6 +1,7 @@
 package com.marcoscarvalho.evernear;
 
 import android.app.Activity;
+import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.Uri;
@@ -31,6 +32,35 @@ public class PermissaoHelper {
     private static final String TAG       = "PermissaoHelper";
     private static final String PREFS     = "evernear_permissoes";
     private static final String KEY_BATERIA = "bateria_solicitada";
+    private static final String KEY_SETUP_CONCLUIDO = "setup_permissoes_concluido";
+
+    private PermissaoHelper() {
+        // Classe utilitária.
+    }
+
+    /**
+     * Indica se esta instalação ainda precisa passar pelo fluxo de permissões.
+     *
+     * O marcador fica somente no armazenamento local. Como o projeto desativa
+     * o backup automático, ele é removido quando o app é desinstalado e não
+     * reaparece após uma nova instalação.
+     */
+    public static boolean precisaConfigurarPermissoes(Context context) {
+        if (context == null) return true;
+        return !context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getBoolean(KEY_SETUP_CONCLUIDO, false);
+    }
+
+    /**
+     * Marca que o fluxo de permissões desta instalação foi percorrido.
+     */
+    public static void marcarConfiguracaoConcluida(Context context) {
+        if (context == null) return;
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean(KEY_SETUP_CONCLUIDO, true)
+                .apply();
+    }
 
     /**
      * Exibe diálogo pedindo isenção de otimização de bateria.
@@ -62,11 +92,11 @@ public class PermissaoHelper {
                 .setTitle("⚡ Ativar alertas em segundo plano")
                 .setMessage(
                         "Para receber alertas do paciente mesmo com o app fechado, "
-                        + "o EverNear precisa ficar ativo em segundo plano.\n\n"
-                        + "Na próxima tela, selecione:\n"
-                        + "\"Não otimizar\" → Concluído\n\n"
-                        + "Isso garante que você seja notificado em emergências, "
-                        + "mesmo com o celular em repouso.")
+                                + "o EverNear precisa ficar ativo em segundo plano.\n\n"
+                                + "Na próxima tela, selecione:\n"
+                                + "\"Não otimizar\" → Concluído\n\n"
+                                + "Isso garante que você seja notificado em emergências, "
+                                + "mesmo com o celular em repouso.")
                 .setCancelable(false)
                 .setPositiveButton("Configurar agora", (dialog, which) -> {
                     try {

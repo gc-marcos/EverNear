@@ -76,13 +76,25 @@ public class MainActivity extends AppCompatActivity {
                     // Tipo ausente ou desconhecido → permanece na tela de seleção de papel
                     if (tipo == null) return;
 
-                    if (FirebaseHelper.isPaciente(tipo)) {
-                        startActivity(new Intent(MainActivity.this, PatientActivity.class));
-                    } else if (FirebaseHelper.isCuidador(tipo)) {
-                        startActivity(new Intent(MainActivity.this, DashboardCuidadorActivity.class));
-                    } else {
+                    boolean ehPaciente = FirebaseHelper.isPaciente(tipo);
+                    boolean ehCuidador = FirebaseHelper.isCuidador(tipo);
+                    if (!ehPaciente && !ehCuidador) {
                         return; // valor desconhecido — não redireciona
                     }
+
+                    BootReceiver.salvarTipoAposLogin(MainActivity.this, tipo);
+
+                    Intent destino;
+                    if (PermissaoHelper.precisaConfigurarPermissoes(MainActivity.this)) {
+                        destino = new Intent(MainActivity.this,
+                                SetupPermissoesActivity.class);
+                        destino.putExtra("userType", tipo);
+                    } else {
+                        destino = new Intent(MainActivity.this,
+                                ehPaciente ? PatientActivity.class
+                                        : DashboardCuidadorActivity.class);
+                    }
+                    startActivity(destino);
                     finish();
                 });
     }

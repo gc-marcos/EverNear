@@ -315,16 +315,18 @@ public class LoginActivity extends AppCompatActivity {
     // ==================== Navegação ====================
 
     /**
-     * Após login/cadastro bem-sucedido, popula o cache local do BootReceiver e navega
-     * para o setup somente no primeiro acesso. Em logins posteriores, abre diretamente
-     * a tela principal do perfil.
+     * Após login/cadastro bem-sucedido, popula o cache local do BootReceiver.
+     * Uma instalação que ainda não concluiu o setup de permissões passa por ele
+     * mesmo quando a conta Firebase já existia antes.
      */
     private void direcionarAposLogin(String tipo, boolean primeiroAcesso) {
         // Popula o cache local para que o BootReceiver funcione mesmo sem rede no boot
         BootReceiver.salvarTipoAposLogin(this, tipo);
 
         Intent destino;
-        if (primeiroAcesso) {
+        boolean precisaConfigurarPermissoes = primeiroAcesso
+                || PermissaoHelper.precisaConfigurarPermissoes(this);
+        if (precisaConfigurarPermissoes) {
             destino = new Intent(LoginActivity.this, SetupPermissoesActivity.class);
             destino.putExtra("userType", tipo);
         } else {
