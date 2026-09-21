@@ -356,6 +356,36 @@ public class FirebaseHelper {
                 });
     }
 
+    /**
+     * Remove o vínculo entre um cuidador e um paciente de forma atômica.
+     *
+     * A operação atualiza os dois documentos na mesma transação, evitando que
+     * o paciente desapareça da lista do cuidador mas continue vendo esse
+     * cuidador em seu próprio perfil (ou o contrário).
+     */
+    public static void desvincularPacienteCuidador(String uidCuidador, String uidPaciente,
+                                                   Callback<Void> callback) {
+        DocumentReference refCuidador = db.collection("users").document(uidCuidador);
+        DocumentReference refPaciente = db.collection("users").document(uidPaciente);
+
+        db.runTransaction(transaction -> {
+                    transaction.update(refCuidador, Fields.PACIENTES_VINCULADOS,
+                            FieldValue.arrayRemove(uidPaciente));
+                    transaction.update(refPaciente, Fields.CUIDADORES_VINCULADOS,
+                            FieldValue.arrayRemove(uidCuidador));
+                    return null;
+                })
+                .addOnSuccessListener(unused -> {
+                    Log.d(TAG, "Desvinculação concluída: cuidador=" + uidCuidador
+                            + " paciente=" + uidPaciente);
+                    if (callback != null) callback.onResult(null);
+                })
+                .addOnFailureListener(e -> {
+                    Log.w(TAG, "Falha na desvinculação: " + e.getMessage());
+                    if (callback != null) callback.onError(e);
+                });
+    }
+
     // ==================== Monitoramento ====================
 
     /**

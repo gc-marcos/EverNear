@@ -7,10 +7,12 @@ import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
+import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.cardview.widget.CardView;
 
@@ -27,10 +29,15 @@ public class DashboardCuidadorActivity extends AppCompatActivity {
     private TextView tvWelcome;
     private LinearLayout llListaPacientes;
     private View tvSemPacientes;
+    private ImageButton btnExcluirPaciente;
     private FirebaseFirestore db;
     private String uidCuidador;
     private ListenerRegistration listenerRegistration;
     private List<String> ultimosUids;
+    private String pacienteSelecionadoUid;
+    private String pacienteSelecionadoNome;
+    private CardView cardPacienteSelecionado;
+    private boolean exclusaoEmAndamento;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -40,6 +47,7 @@ public class DashboardCuidadorActivity extends AppCompatActivity {
         tvWelcome = findViewById(R.id.tv_welcome_cuidador);
         llListaPacientes = findViewById(R.id.ll_lista_pacientes);
         tvSemPacientes = findViewById(R.id.tv_sem_pacientes);
+        btnExcluirPaciente = findViewById(R.id.btn_excluir_paciente);
         db = FirebaseFirestore.getInstance();
         uidCuidador = FirebaseAuth.getInstance().getUid();
 
@@ -53,6 +61,8 @@ public class DashboardCuidadorActivity extends AppCompatActivity {
         View abrirVinculoVazio = findViewById(R.id.btn_vincular_paciente_empty);
         abrirVinculo.setOnClickListener(v -> abrirVincularPaciente());
         abrirVinculoVazio.setOnClickListener(v -> abrirVincularPaciente());
+        btnExcluirPaciente.setOnClickListener(v -> confirmarExclusaoPaciente());
+        atualizarEstadoBotaoExcluir();
     }
 
     private void abrirVincularPaciente() {
@@ -73,6 +83,7 @@ public class DashboardCuidadorActivity extends AppCompatActivity {
             listenerRegistration = null;
         }
         ultimosUids = null;
+        limparSelecaoPaciente();
     }
 
     private void iniciarListener() {
@@ -93,6 +104,7 @@ public class DashboardCuidadorActivity extends AppCompatActivity {
             tvSemPacientes.setVisibility(View.VISIBLE);
             llListaPacientes.removeAllViews();
             ultimosUids = null;
+            limparSelecaoPaciente();
             return;
         }
         tvSemPacientes.setVisibility(View.GONE);
@@ -190,11 +202,89 @@ public class DashboardCuidadorActivity extends AppCompatActivity {
         card.addView(inner);
         llListaPacientes.addView(card);
 
+        card.setOnLongClickListener(v -> {
+            selecionarPaciente(card, nome, uidPaciente);
+            Toast.makeText(this, nome + " selecionado", Toast.LENGTH_SHORT).show();
+            return true;
+        });
         card.setOnClickListener(v -> {
             Intent intent = new Intent(this, CaregiverActivity.class);
             intent.putExtra("pacienteId", uidPaciente);
             startActivity(intent);
         });
+    }
+
+    private void selecionarPaciente(CardView card, String nome, String uidPaciente) {
+        if (cardPacienteSelecionado != null
+                && cardPacienteSelecionado != card) {
+            cardPacienteSelecionado.setCardBackgroundColor(Color.parseColor("#171D37"));
+        }
+
+        cardPacienteSelecionado = card;
+        pacienteSelecionadoUid = uidPaciente;
+        pacienteSelecionadoNome = nome;
+        card.setCardBackgroundColor(Color.parseColor("#263A68"));
+        atualizarEstadoBotaoExcluir();
+    }
+
+    private void limparSelecaoPaciente() {
+        if (cardPacienteSelecionado != null) {
+            cardPacienteSelecionado.setCardBackgroundColor(Color.parseColor("#171D37"));
+        }
+        cardPacienteSelecionado = null;
+        pacienteSelecionadoUid = null;
+        pacienteSelecionadoNome = null;
+        exclusaoEmAndamento = false;
+        atualizarEstadoBotaoExcluir();
+    }
+
+    private void atualizarEstadoBotaoExcluir() {
+        if (btnExcluirPaciente == null) return;
+        boolean ativo = pacienteSelecionadoUid != null && !exclusaoEmAndamento;
+        btnExcluirPaciente.setEnabled(ativo);
+        btnExcluirPaciente.setAlpha(ativo ? 1f : 0.35f);
+    }
+
+    private void confirmarExclusaoPaciente() {
+        if (pacienteSelecionadoUid == null || exclusaoEmAndamento) return;
+
+        String uidPaciente = pacienteSelecionadoUid;
+        String nomePaciente = pacienteSelecionadoNome != null
+                ? pacienteSelecionadoNome : "Paciente";
+
+        new AlertDialog.Builder(this)
+                .setTitle("Excluir paciente?")
+                .setMessage("Deseja realmente excluir " + nomePaciente
+                        + " da sua lista de pacientes?")
+                .setNegativeButton("Cancelar", null)
+                .setPositiveButton("Excluir", (dialog, which) ->
+                        excluirPaciente(uidPaciente, nomePaciente))
+                .show();
+    }
+
+    private void excluirPaciente(String uidPaciente, String nomePaciente) {
+        exclusaoEmAndamento = true;
+        atualizarEstadoBotaoExcluir();
+
+        FirebaseHelper.desvincularPacienteCuidador(uidCuidador, uidPaciente,
+                new FirebaseHelper.Callback<Void>() {
+                    @Override
+                    public void onResult(Void result) {
+                        limparSelecaoPaciente();
+                        Toast.makeText(DashboardCuidadorActivity.this,
+                                nomePaciente + " foi excluído da sua lista.",
+                                Toast.LENGTH_SHORT).show();
+                    }
+
+                    @Override
+                    public void onError(Exception error) {
+                        exclusaoEmAndamento = false;
+                        atualizarEstadoBotaoExcluir();
+                        Toast.makeText(DashboardCuidadorActivity.this,
+                                "Não foi possível excluir o paciente. Tente novamente.",
+                                Toast.LENGTH_LONG).show();
+                    }
+                });
     }
 
     private String gerarIniciais(String nome) {
