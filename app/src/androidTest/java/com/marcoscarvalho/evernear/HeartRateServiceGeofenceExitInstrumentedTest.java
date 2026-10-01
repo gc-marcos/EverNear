@@ -1,32 +1,31 @@
 package com.marcoscarvalho.evernear;
 
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import android.content.Context;
 import android.content.Intent;
 import android.location.Location;
 
+import androidx.core.content.ContextCompat;
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
-import androidx.test.platform.app.InstrumentationRegistry;
-import androidx.test.rule.ServiceTestRule;
-import androidx.test.uiautomator.UiDevice;
 
 import com.google.android.gms.tasks.Tasks;
 import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.QuerySnapshot;
 
 import org.junit.After;
-import org.junit.Assert;
 import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import java.util.concurrent.ExecutionException;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 /**
  * Teste de ponta a ponta: "saída de zona segura → perda de conexão → reconexão → alerta gravado no Firestore".
@@ -35,123 +34,87 @@ import java.util.concurrent.TimeoutException;
 @RunWith(AndroidJUnit4.class)
 public class HeartRateServiceGeofenceExitInstrumentedTest {
 
-    private static final String EMULATOR_HOST = "192.168.17.198";
-    private static final String EMAIL_PACIENTE_TESTE = "margarete@gmail.com";
-    private static final String SENHA_PACIENTE_TESTE = "123456";
-
-    private static boolean isEmulatorInitialized = false;
-    private UiDevice device;
-
-    @Rule
-    public final ServiceTestRule serviceRule = new ServiceTestRule();
+    private FirebaseFirestore firestore;
+    private String pacienteId;
+    private String cuidadorId;
 
     @Before
-    public void setUp() {
-        device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation());
+    public void setUp() throws Exception {
+        FirebaseEmulatorTestSupport.configure();
+        firestore = FirebaseFirestore.getInstance();
+        Tasks.await(firestore.enableNetwork(),
+                FirebaseEmulatorTestSupport.timeoutSeconds(), TimeUnit.SECONDS);
+        FirebaseUser paciente = FirebaseEmulatorTestSupport.createTestUser();
+        pacienteId = paciente.getUid();
+        cuidadorId = FirebaseEmulatorTestSupport.id("cuidador");
 
-        // Garantia de inicialização única do emulador por processo
-        if (!isEmulatorInitialized) {
-            try {
-                FirebaseAuth.getInstance().useEmulator(EMULATOR_HOST, 9099);
-                FirebaseFirestore.getInstance().useEmulator(EMULATOR_HOST, 8080);
-                isEmulatorInitialized = true;
-            } catch (IllegalStateException e) {
-                isEmulatorInitialized = true;
-            }
-        }
+        Map<String, Object> pacienteData = new HashMap<>();
+        pacienteData.put("nome", "Paciente instrumentado");
+        pacienteData.put("tipo", "paciente");
+        pacienteData.put("cuidadoresVinculados", Arrays.asList(cuidadorId));
+        Tasks.await(firestore.collection("users").document(pacienteId).set(pacienteData),
+                FirebaseEmulatorTestSupport.timeoutSeconds(), TimeUnit.SECONDS);
     }
 
     @Test
     public void saidaDeZonaComPerdaERestauracaoDeConexaoDeveGravarAlerta() throws Exception {
-        // 1. Autenticação Síncrona no Auth Emulator
-        try {
-            Tasks.await(
-                    FirebaseAuth.getInstance().signInWithEmailAndPassword(
-                            EMAIL_PACIENTE_TESTE, SENHA_PACIENTE_TESTE),
-                    30, TimeUnit.SECONDS);
-        } catch (TimeoutException e) {
-            Assert.fail("A Task de autenticação estourou o tempo de resposta (Timeout).");
-        } catch (ExecutionException e) {
-            Assert.fail("A autenticação falhou durante a execução: " + e.getCause().getMessage());
-        }
-
         Context appContext = ApplicationProvider.getApplicationContext();
 
-        // 2. Aquecimento: cria o serviço ANTES de qualquer evento de geofence,
-        // para que onCreate() dispare carregarDadosPaciente() e o listener
-        // assíncrono do Firestore tenha tempo de popular uidPaciente e
-        // cuidadoresVinculados. Sem isso, o evento de geofence chega antes
-        // dos dados existirem e é descartado silenciosamente
-        // (confirmado em log: listener responde ~1.5s após onCreate()).
-        Intent warmupIntent = new Intent(appContext, HeartRateService.class);
-        appContext.startService(warmupIntent);
-        Thread.sleep(3000); // aguarda addSnapshotListener responder
+        // O serviço é aquecido com o documento do paciente já no cache local.
+        FirebaseEmulatorTestSupport.iniciarHeartRateService(appContext);
+        Thread.sleep(2000);
 
-        // 3. Simulação de Perda de Conexão via ADB (Desativa Wi-Fi e Dados Móveis)
-        device.executeShellCommand("svc wifi disable");
-        device.executeShellCommand("svc data disable");
-        Thread.sleep(3000); // Aguarda a alteração do estado da rede no sistema
+        // Simula perda de conexão no próprio SDK (determinístico, sem depender de rede).
+        Tasks.await(firestore.disableNetwork(),
+                FirebaseEmulatorTestSupport.timeoutSeconds(), TimeUnit.SECONDS);
 
-        // 4. Preparação da localização simulada (Zona Externa)
         Location localizacaoSimulada = new Location("DEBUG");
         localizacaoSimulada.setLatitude(-23.65376);
         localizacaoSimulada.setLongitude(-46.45246);
+        localizacaoSimulada.setAccuracy(10f);
 
         Intent intent = new Intent(appContext, HeartRateService.class);
         intent.setAction(HeartRateService.ACTION_DEBUG_GEOFENCE_EXIT);
         intent.putExtra(HeartRateService.EXTRA_DEBUG_LOCATION, localizacaoSimulada);
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
 
-        // Disparo do evento de geofence, só depois dos dados já carregados
-        appContext.startService(intent);
+        // startForegroundService exige startForeground() no onStartCommand (já corrigido no serviço).
+        ContextCompat.startForegroundService(appContext, intent);
 
-        // 5. Aguarda um período offline simulando a tentativa de envio sem rede
-        Thread.sleep(3000);
+        // Aguarda a escrita ser aceita pela fila local e restaura a conexão.
+        Thread.sleep(1000);
+        Tasks.await(firestore.enableNetwork(),
+                FirebaseEmulatorTestSupport.timeoutSeconds(), TimeUnit.SECONDS);
 
-        // 6. Restauração da Conexão via ADB
-        device.executeShellCommand("svc wifi enable");
-        device.executeShellCommand("svc data enable");
-        Thread.sleep(3000); // Aguarda o restabelecimento do canal de comunicação com o Firestore
-
-        // 7. Polling para verificar a persistência do alerta após o reestabelecimento da rede
-        boolean documentoEncontrado = false;
-        int tentativas = 0;
-        int maxTentativas = 15;
-
-        while (!documentoEncontrado && tentativas < maxTentativas) {
-            Thread.sleep(3000);
-            try {
-                QuerySnapshot alertas = Tasks.await(
-                        FirebaseFirestore.getInstance().collection("alerts").get(),
-                        5, TimeUnit.SECONDS);
-
-                if (alertas != null && !alertas.isEmpty()) {
-                    documentoEncontrado = true;
-                }
-            } catch (Exception e) {
-                // Erro esperado caso o Firestore ainda esteja reestabelecendo o socket de conexão
-            }
-            tentativas++;
+        QuerySnapshot alertas = null;
+        for (int tentativas = 0; tentativas < 20; tentativas++) {
+            Thread.sleep(500);
+            alertas = Tasks.await(
+                    firestore.collection("alerts")
+                            .whereEqualTo(FirebaseHelper.Fields.PACIENTE_ID, pacienteId)
+                            .whereEqualTo(FirebaseHelper.Fields.TIPO_ALERTA, "SAIDA_ZONA")
+                            .get(),
+                    FirebaseEmulatorTestSupport.timeoutSeconds(), TimeUnit.SECONDS);
+            if (alertas != null && !alertas.isEmpty()) break;
         }
 
-        // 8. Validação final
-        assertTrue("Esperava ao menos um alerta no Firestore após a reconexão da rede", documentoEncontrado);
+        assertTrue("Esperava ao menos um alerta no Firestore após a reconexão da rede",
+                alertas != null && !alertas.isEmpty());
+        assertNotNull(alertas.getDocuments().get(0)
+                .getDouble(FirebaseHelper.Fields.LATITUDE));
+        assertNotNull(alertas.getDocuments().get(0)
+                .getDouble(FirebaseHelper.Fields.LONGITUDE));
     }
 
     @After
-    public void tearDown() {
-        try {
-            // Garante a reativação da rede em caso de falhas para não afetar outros testes
-            if (device != null) {
-                device.executeShellCommand("svc wifi enable");
-                device.executeShellCommand("svc data enable");
-            }
-
-            Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
-            context.stopService(new Intent(context, HeartRateService.class));
-            FirebaseAuth.getInstance().signOut();
-        } catch (Exception e) {
-            // Ignora falhas na limpeza do estado
+    public void tearDown() throws Exception {
+        if (firestore != null) {
+            try {
+                Tasks.await(firestore.enableNetwork(),
+                        FirebaseEmulatorTestSupport.timeoutSeconds(), TimeUnit.SECONDS);
+            } catch (Exception ignored) { }
         }
+        Context context = ApplicationProvider.getApplicationContext();
+        FirebaseEmulatorTestSupport.pararHeartRateService(context);
+        FirebaseAuth.getInstance().signOut();
     }
 }

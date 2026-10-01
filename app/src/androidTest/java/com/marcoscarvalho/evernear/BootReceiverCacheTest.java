@@ -3,11 +3,15 @@ package com.marcoscarvalho.evernear;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 
+import android.app.Service;
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
 
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
+
+import com.google.firebase.auth.FirebaseAuth;
 
 import org.junit.After;
 import org.junit.Test;
@@ -29,6 +33,7 @@ public class BootReceiverCacheTest {
 
     private static final String PREFS_NAME    = "evernear_prefs";
     private static final String KEY_USER_TIPO = "user_tipo";
+    private Class<? extends Service> servicoSelecionado;
 
     private Context context() {
         return ApplicationProvider.getApplicationContext();
@@ -63,5 +68,26 @@ public class BootReceiverCacheTest {
 
         SharedPreferences prefs = context().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         assertNull(prefs.getString(KEY_USER_TIPO, null));
+    }
+
+    @Test
+    public void bootSemAuthRestauradaDeveUsarCacheLocal() {
+        FirebaseEmulatorTestSupport.configure();
+        FirebaseAuth.getInstance().signOut();
+        BootReceiver.salvarTipoAposLogin(context(), "paciente");
+
+        BootReceiver receiver = new BootReceiver() {
+            @Override
+            void iniciarServicoEmForeground(Context context,
+                                            Class<? extends Service> serviceClass) {
+                servicoSelecionado = serviceClass;
+            }
+        };
+        receiver.onReceive(context(),
+                new Intent(Intent.ACTION_BOOT_COMPLETED));
+
+        SharedPreferences prefs = context().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        assertEquals("paciente", prefs.getString(KEY_USER_TIPO, null));
+        assertEquals(HeartRateService.class, servicoSelecionado);
     }
 }

@@ -100,7 +100,7 @@ public class CaregiverAlertService extends Service {
      * 6 min: maior que o intervalo de verificação (5 min) para evitar falsos positivos,
      * mas menor que o tempo em que uma anomalia poderia passar sem detecção.
      */
-    private static final long RELOGIO_MORTO_THRESHOLD_MS = 6 * 60_000L;
+    static final long RELOGIO_MORTO_THRESHOLD_MS = 6 * 60_000L;
 
     // ── Estado estático ───────────────────────────────────────────────────────
     /** Referência estática para verificação rápida de disponibilidade. */
@@ -165,6 +165,9 @@ public class CaregiverAlertService extends Service {
         notifManager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         prefs        = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
         criarCanais();
+        // Promove o serviço imediatamente. A consulta de Auth e o carregamento do
+        // listener acontecem depois e não podem consumir o prazo do Android 8/9.
+        startForeground(NOTIF_ID_FG, buildFgNotification());
         carregarCacheAlertas();
         Log.d(TAG, "Serviço criado");
     }
@@ -200,7 +203,6 @@ public class CaregiverAlertService extends Service {
         // Persiste UID e estado para suportar BootReceiver e isRunning(context)
         persistirEstado(true);
 
-        startForeground(NOTIF_ID_FG, buildFgNotification());
         ouvirAlertas();               // garante listener único
         monitorarPacientesVinculados(); // detecta relógio morto → acorda via FCM
 
@@ -237,10 +239,18 @@ public class CaregiverAlertService extends Service {
 
         AlarmManager am = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
         if (am != null) {
-            am.setExactAndAllowWhileIdle(
-                    AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                    SystemClock.elapsedRealtime() + 5_000L,
-                    pi);
+            try {
+                am.setExactAndAllowWhileIdle(
+                        AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                        SystemClock.elapsedRealtime() + 5_000L,
+                        pi);
+            } catch (SecurityException e) {
+                Log.w(TAG, "Alarme exato indisponível — usando fallback durante Doze", e);
+                am.setAndAllowWhileIdle(
+                        AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                        SystemClock.elapsedRealtime() + 5_000L,
+                        pi);
+            }
         }
         super.onTaskRemoved(rootIntent);
     }
@@ -354,9 +364,10 @@ public class CaregiverAlertService extends Service {
                             return;
                         }
 
-                        long silencio = System.currentTimeMillis() - timestamp.getTime();
+                        long agoraMillis = System.currentTimeMillis();
+                        long silencio = agoraMillis - timestamp.getTime();
 
-                        if (silencio > RELOGIO_MORTO_THRESHOLD_MS) {
+                        if (isRelogioSemDados(timestamp, agoraMillis)) {
                             Log.w(TAG, "Relógio morto detectado — paciente=" + nomeLog
                                     + " silêncio=" + (silencio / 1000) + "s"
                                     + " → solicitando wake-up via Firestore+FCM");
@@ -370,6 +381,22 @@ public class CaregiverAlertService extends Service {
                             Log.w(TAG, "Falha ao ler dados do paciente "
                                     + uidPaciente + ": " + e.getMessage()));
         }
+    }
+
+    /**
+     * Regra de domínio para detectar ausência prolongada de leituras.
+     *
+     * Mantida fora do callback do Firestore para que a mesma regra usada em
+     * produção possa ser validada sem esperar seis minutos nem depender de
+     * relógio/rede reais no teste.
+     *
+     * Timestamp nulo significa primeiro uso e não deve acordar o relógio
+     * automaticamente.
+     */
+    static boolean isRelogioSemDados(Date ultimoBpmTimestamp, long agoraMillis) {
+        if (ultimoBpmTimestamp == null) return false;
+        long silencio = agoraMillis - ultimoBpmTimestamp.getTime();
+        return silencio > RELOGIO_MORTO_THRESHOLD_MS;
     }
 
     // ==================== Listener de alertas ====================

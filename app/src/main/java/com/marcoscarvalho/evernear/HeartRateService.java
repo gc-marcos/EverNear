@@ -209,6 +209,8 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
     private Handler       serviceBackgroundHandler;
 
     // Dados do paciente
+    private String ultimoStatus = "Monitorando em segundo plano";
+    private String ultimoBpm    = "--";
     private String               uidPaciente;
     private String               nomePaciente         = "Paciente";
     private List<String>         cuidadoresVinculados = new ArrayList<>();
@@ -262,6 +264,11 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
                 .getBoolean(KEY_FORA_DA_ZONA, false);
         criarCanalNotificacao();
 
+        // startForegroundService() impõe um prazo curto para promover o serviço.
+        // Faça isso antes de inicializar threads, alarmes, wakelocks e receivers,
+        // que podem atrasar em aparelhos mais lentos ou durante testes instrumentados.
+        startForeground(NOTIF_ID, buildNotification("Monitorando em segundo plano", "--"));
+
         // Cria thread dedicada para as tarefas periódicas do serviço
         serviceLifecycleThread = new HandlerThread("EverNear-ServiceThread",
                 android.os.Process.THREAD_PRIORITY_FOREGROUND);
@@ -274,15 +281,6 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
         registrarGpsReceiver();
         registrarScreenOffReceiver();
 
-        // CRÍTICO: startForeground() precisa rodar em até ~5s da chamada a
-        // startForegroundService(), independente de qual action chegou primeiro.
-        // O GeofenceReceiver chama startForegroundService() com ACTION_GEOFENCE_EXIT
-        // como PRIMEIRO Intent quando o processo estava morto — esse caminho no
-        // onStartCommand() retorna antes de chegar ao antigo startForeground() do
-        // fallback, e o Android derruba o processo por timeout
-        // (ForegroundServiceDidNotStartInTimeException).
-        startForeground(NOTIF_ID, buildNotification("Monitorando em segundo plano", "--"));
-
         // CRÍTICO: carrega uidPaciente e cuidadoresVinculados assim que o serviço
         // é criado, independente de qual action chegou primeiro. Sem isto, um evento
         // de geofence (real ou debug) que chegue como PRIMEIRO Intent encontra
@@ -293,6 +291,7 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        startForeground(NOTIF_ID, buildNotification(ultimoStatus, ultimoBpm));
         if (intent != null) {
             String action = intent.getAction();
 
@@ -396,8 +395,7 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
                 PendingIntent.FLAG_ONE_SHOT | PendingIntent.FLAG_IMMUTABLE);
         AlarmManager am = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
         if (am != null) {
-            am.setExactAndAllowWhileIdle(
-                    AlarmManager.ELAPSED_REALTIME_WAKEUP,
+            agendarAlarmeMesmoSemPermissaoExata(am,
                     SystemClock.elapsedRealtime() + 10_000L, pi);
         }
         super.onTaskRemoved(rootIntent);
@@ -845,10 +843,8 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
                 new Intent(this, HeartRateService.class),
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
-        am.setExactAndAllowWhileIdle(
-                AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                SystemClock.elapsedRealtime() + WATCHDOG_EXTERNO_INTERVAL_MS,
-                pi);
+        agendarAlarmeMesmoSemPermissaoExata(am,
+                SystemClock.elapsedRealtime() + WATCHDOG_EXTERNO_INTERVAL_MS, pi);
 
         Log.d(TAG, "Watchdog externo agendado em "
                 + WATCHDOG_EXTERNO_INTERVAL_MS / 60_000 + " min");
@@ -886,10 +882,26 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
                 PendingIntent.FLAG_ONE_SHOT | PendingIntent.FLAG_IMMUTABLE);
         AlarmManager am = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
         if (am != null) {
-            am.setExactAndAllowWhileIdle(
-                    AlarmManager.ELAPSED_REALTIME_WAKEUP,
+            agendarAlarmeMesmoSemPermissaoExata(am,
                     SystemClock.elapsedRealtime() + 5_000L, pi);
             Log.d(TAG, "Reinício de segurança agendado via AlarmManager em 5s");
+        }
+    }
+
+    /**
+     * Tenta preservar o reinício exato, mas não encerra o serviço se o usuário
+     * ainda não concedeu a permissão especial SCHEDULE_EXACT_ALARM.
+     */
+    private void agendarAlarmeMesmoSemPermissaoExata(AlarmManager alarmManager,
+                                                     long quando,
+                                                     PendingIntent pendingIntent) {
+        try {
+            alarmManager.setExactAndAllowWhileIdle(
+                    AlarmManager.ELAPSED_REALTIME_WAKEUP, quando, pendingIntent);
+        } catch (SecurityException e) {
+            Log.w(TAG, "Alarme exato indisponível — usando fallback durante Doze", e);
+            alarmManager.setAndAllowWhileIdle(
+                    AlarmManager.ELAPSED_REALTIME_WAKEUP, quando, pendingIntent);
         }
     }
 
@@ -1293,10 +1305,8 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         AlarmManager am = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
         if (am != null) {
-            am.setExactAndAllowWhileIdle(
-                    AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                    SystemClock.elapsedRealtime() + atrasoMs,
-                    pi);
+            agendarAlarmeMesmoSemPermissaoExata(am,
+                    SystemClock.elapsedRealtime() + atrasoMs, pi);
         }
     }
 
@@ -1386,8 +1396,7 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
 
         AlarmManager am = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
         if (am != null) {
-            am.setExactAndAllowWhileIdle(
-                    AlarmManager.ELAPSED_REALTIME_WAKEUP,
+            agendarAlarmeMesmoSemPermissaoExata(am,
                     SystemClock.elapsedRealtime() + ESCALADA_MS, pi);
             Log.d(TAG, "Escalada agendada para cuidador[" + proximoIndice
                     + "] em " + ESCALADA_MS / 60_000 + " min");
@@ -1487,6 +1496,10 @@ public class HeartRateService extends Service implements HeartRateMonitor.Listen
      * @param bpm    valor BPM como string, ou "--" quando indisponível
      */
     private Notification buildNotification(String status, String bpm) {
+
+        ultimoStatus = status;
+        ultimoBpm    = bpm;
+
         Intent openApp = new Intent(this, PatientActivity.class);
         openApp.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         PendingIntent pi = PendingIntent.getActivity(this, 0, openApp,

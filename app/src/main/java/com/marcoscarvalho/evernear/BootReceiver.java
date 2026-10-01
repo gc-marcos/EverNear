@@ -4,8 +4,10 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.app.Service;
 import android.util.Log;
 
+import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 
 import com.google.firebase.auth.FirebaseAuth;
@@ -52,10 +54,13 @@ public class BootReceiver extends BroadcastReceiver {
 
         Log.d(TAG, "Boot detectado — verificando autenticação");
 
-        // 2. Verifica autenticação — não faz nada se não há usuário logado
+        // 2. Verifica autenticação. Após um reboot, o FirebaseAuth pode ainda
+        // não ter restaurado o usuário do disco. Nesse caso, o cache local é
+        // a única fonte disponível para retomar o serviço sem rede.
         FirebaseAuth auth = FirebaseAuth.getInstance();
         if (auth.getCurrentUser() == null) {
-            Log.d(TAG, "Sem usuário autenticado — nenhum serviço iniciado");
+            Log.w(TAG, "Auth ainda não restaurada — tentando cache local");
+            iniciarServicoPorCache(context);
             return;
         }
 
@@ -66,8 +71,11 @@ public class BootReceiver extends BroadcastReceiver {
          * 3. goAsync() → mantém o BroadcastReceiver "vivo" até result.finish()
          *    Sem isso, o Android pode matar o processo antes do Firestore responder,
          *    especialmente em Android 8+ com restrições de background.
+         *
+         *    ATENÇÃO: goAsync() retorna null quando onReceive() é chamado
+         *    manualmente (ex.: testes instrumentados). Em produção nunca é null.
          */
-        PendingResult result = goAsync();
+        final PendingResult result = goAsync();
 
         FirebaseFirestore.getInstance()
                 .collection("users")
@@ -91,7 +99,7 @@ public class BootReceiver extends BroadcastReceiver {
                         iniciarServicoPorTipo(context, tipo);
 
                     } finally {
-                        result.finish(); // ← libera o processo sempre, mesmo em erro
+                        finalizar(result); // libera o processo sempre, mesmo em erro
                     }
                 })
                 .addOnFailureListener(e -> {
@@ -100,7 +108,7 @@ public class BootReceiver extends BroadcastReceiver {
                                 + " — tentando cache local");
                         iniciarServicoPorCache(context);
                     } finally {
-                        result.finish();
+                        finalizar(result);
                     }
                 });
     }
@@ -110,24 +118,37 @@ public class BootReceiver extends BroadcastReceiver {
     // -------------------------------------------------------------------------
 
     /**
+     * Finaliza o broadcast assíncrono de forma segura.
+     * Ignora {@code null} (chamada manual de onReceive em testes).
+     */
+    private static void finalizar(@Nullable PendingResult result) {
+        if (result != null) {
+            result.finish();
+        }
+    }
+
+    /**
      * Inicia o serviço correto com base no tipo do usuário.
      * Checagem explícita para evitar iniciar serviço errado com valores inesperados.
      */
     private void iniciarServicoPorTipo(Context context, String tipo) {
         if (FirebaseHelper.isPaciente(tipo)) {
             Log.d(TAG, "Iniciando HeartRateService (paciente)");
-            ContextCompat.startForegroundService(context,
-                    new Intent(context, HeartRateService.class));
+            iniciarServicoEmForeground(context, HeartRateService.class);
 
         } else if (FirebaseHelper.isCuidador(tipo)) {
             Log.d(TAG, "Iniciando CaregiverAlertService (cuidador)");
-            ContextCompat.startForegroundService(context,
-                    new Intent(context, CaregiverAlertService.class));
+            iniciarServicoEmForeground(context, CaregiverAlertService.class);
 
         } else {
             // Tipo nulo, vazio ou desconhecido — não inicia nada para evitar crashes
             Log.w(TAG, "Tipo de usuário desconhecido ou nulo: [" + tipo + "] — nenhum serviço iniciado");
         }
+    }
+
+    /** Ponto substituível nos testes para validar o roteamento sem iniciar serviços reais. */
+    void iniciarServicoEmForeground(Context context, Class<? extends Service> serviceClass) {
+        ContextCompat.startForegroundService(context, new Intent(context, serviceClass));
     }
 
     /**
